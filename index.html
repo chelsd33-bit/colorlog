@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>색차 측정 기록</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: single column instrument log — capture, review table, device-local history with Excel export */
+:root{
+  --bg:#f3f4f2; --surface:#ffffff; --ink:#1b2124; --muted:#5d686d; --line:#d9dedc;
+  --accent:#1f5f74; --accent-ink:#ffffff;
+  --fail:#c8321f; --fail-soft:#fbe5e1; --pass:#2c7a4b; --pass-soft:#e2f2e8; --warn:#9a6a00; --warn-soft:#fbf0d2;
+  --sans:"IBM Plex Sans KR",system-ui,-apple-system,"Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#121618; --surface:#1b2124; --ink:#e7ecec; --muted:#9aa6aa; --line:#2e373a;
+  --accent:#6fb3c9; --accent-ink:#0d1a1f;
+  --fail:#ff7b67; --fail-soft:#3b1e19; --pass:#6fcf95; --pass-soft:#173023; --warn:#e6b84a; --warn-soft:#352a10;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(48px + env(safe-area-inset-bottom,0px));display:grid;gap:20px}
+header{display:grid;gap:4px}
+h1{font-size:22px;font-weight:700;margin:0}
+.sub{color:var(--muted);font-size:13px;margin:0}
+h2{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.fields .wide{grid-column:1/-1}
+@media (max-width:480px){.fields{grid-template-columns:1fr}}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input[type=text],input.num{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shoot{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:16px;font-size:17px;font-weight:600;cursor:pointer;position:relative}
+.shoot:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.shoot.off{opacity:.55;pointer-events:none}
+.shoot input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.shoot svg{width:22px;height:22px}
+.row2{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.hint{font-size:13px;color:var(--muted);margin:10px 0 0}
+.linkbtn{font:inherit;font-size:13px;background:none;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;padding:0}
+.status{display:flex;align-items:center;gap:10px;font-size:14px;margin-top:12px}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.err{background:var(--fail-soft);color:var(--fail);border-radius:6px;padding:10px 12px;font-size:14px;margin-top:12px}
+.pending{background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn);border-radius:8px;padding:12px;margin-top:12px;display:grid;gap:10px}
+.pending p{margin:0;font-size:14px}
+.pending b{color:var(--warn)}
+.pending .actions{margin-top:0}
+.preview{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
+.preview img{width:72px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+.meta{font-size:13px;color:var(--muted);display:grid;gap:6px;min-width:0}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;font-weight:600;color:var(--muted)}
+th:first-child,td:first-child{text-align:left}
+td.ang{font-family:var(--mono);font-size:13px}
+tr.key td.ang{font-weight:600}
+tr.key td.ang::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle}
+tr.minor{color:var(--muted)}
+input.num{font-family:var(--mono);font-size:14px;text-align:right;width:76px;padding:5px 6px}
+tr.fail input.num{border-color:var(--fail)}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px}
+.pill.fail{background:var(--fail-soft);color:var(--fail)}
+.pill.pass{background:var(--pass-soft);color:var(--pass)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+button.st{font:inherit;border:0;cursor:pointer;background:none;padding:0}
+.chk{font-size:12px;color:var(--warn)}
+.chk.ok{color:var(--muted)}
+.notes{font-size:13px;color:var(--warn);margin:10px 0 0;padding-left:18px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.small{padding:6px 10px;font-size:13px;font-weight:500}
+.btn.danger{color:var(--fail);border-color:var(--fail)}
+.histhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.histhead h2{margin:0}
+.histbtns{display:flex;gap:8px;flex-wrap:wrap}
+.empty{color:var(--muted);font-size:14px;padding:12px 0;margin:0}
+.rec{border-top:1px solid var(--line);padding:12px 0;display:grid;gap:8px}
+.rec:first-child{border-top:0;padding-top:0}
+.rec-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.rec-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.rec-time{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{border-radius:6px;padding:6px 8px;display:grid;font-variant-numeric:tabular-nums}
+.chip.fail{background:var(--fail-soft);color:var(--fail)}
+.chip.pass{background:var(--pass-soft);color:var(--pass)}
+.chip.none{background:var(--bg);color:var(--muted)}
+.chip small{font-family:var(--mono);font-size:11px;opacity:.85}
+.chip strong{font-family:var(--mono);font-size:16px}
+.rec-note{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.rec-act{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:13px;flex-wrap:wrap}
+.sync{font-size:12px;font-weight:600;margin-right:auto}
+.sync.sent{color:var(--pass)}
+.sync.pending,.sync.sending{color:var(--muted)}
+.sync.failed{color:var(--fail)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>색차 측정 기록</h1>
+    <p class="sub">색차계 화면을 찍으면 ΔE*ab 값이 표에 들어갑니다. 핵심 각도는 25°, 45°, 75°입니다. 사진과 기록은 이 휴대폰 밖으로 나가지 않습니다.</p>
+  </header>
+
+  <section class="card">
+    <h2>새 측정</h2>
+    <div class="fields">
+      <label class="f">측정자<input type="text" id="person" placeholder="이름 또는 소속" autocomplete="off" maxlength="40"></label>
+      <label class="f">시료 / 로트<input type="text" id="sampleName" placeholder="예: LOT-2410-A" autocomplete="off" maxlength="80"></label>
+      <label class="f wide">메모<input type="text" id="noteInput" placeholder="선택" autocomplete="off" maxlength="200"></label>
+    </div>
+    <label class="shoot" id="shootBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <span>화면 사진 찍기</span>
+      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 사진 찍기">
+    </label>
+    <div class="row2">
+      <span class="hint" style="margin:0">표가 화면에 꽉 차게, 정면에서 반사 없이 찍으면 잘 읽힙니다.</span>
+      <button class="linkbtn" id="manualBtn" type="button">사진 없이 직접 입력</button>
+    </div>
+    <div class="status" id="busy" hidden><div class="spin"></div><span id="busyText">사진을 읽는 중…</span></div>
+    <div class="pending" id="pendingBox" role="alert" hidden>
+      <p><b>저장하지 않은 측정이 있습니다.</b> 아래 확인 표의 값이 저장되지 않았습니다. 새로 시작하면 이 값은 사라집니다.</p>
+      <div class="actions">
+        <button class="btn primary small" id="pendSave" type="button">저장하고 새로 시작</button>
+        <button class="btn small" id="pendDrop" type="button">저장하지 않고 새로 시작</button>
+        <button class="btn small" id="pendCancel" type="button">취소</button>
+      </div>
+    </div>
+    <div class="err" id="err" hidden></div>
+  </section>
+
+  <section class="card" id="reviewCard" hidden>
+    <h2>읽은 값 확인</h2>
+    <div class="preview" id="previewBox">
+      <img id="thumb" alt="촬영한 색차계 화면">
+      <div class="meta">
+        <span>사진 판독은 틀릴 수 있습니다. 화면과 숫자, 특히 마이너스 부호를 꼭 대조해 주세요.</span>
+        <span id="mSummary"></span>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>각도</th><th>dE</th><th>dL</th><th>da</th><th>db</th><th>판정</th><th>검산</th></tr></thead>
+        <tbody id="rowsBody"></tbody>
+      </table>
+    </div>
+    <ul class="notes" id="notes" hidden></ul>
+    <p class="hint">숫자를 눌러 고칠 수 있고, 판정 배지를 누르면 합격/불합격이 바뀝니다. 검산은 dE와 √(dL²+da²+db²)의 차이입니다.</p>
+    <div class="actions">
+      <button class="btn primary" id="saveBtn" type="button">기록 저장</button>
+      <button class="btn" id="discardBtn" type="button">버리기</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="histhead">
+      <h2>측정 기록 (이 휴대폰)</h2>
+      <div class="histbtns" id="histBtns" hidden>
+        <button class="btn small primary" id="shareBtn" type="button">엑셀 공유</button>
+        <button class="btn small" id="xlsxBtn" type="button">엑셀 내려받기</button>
+      </div>
+    </div>
+    <div id="hist"></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ===== 구글 시트 연결 설정 (관리자가 채움) =====
+   SHEET_URL: 시트의 Apps Script를 "웹 앱"으로 배포하고 받은 주소 (…/exec). 비워 두면 시트 전송을 쓰지 않습니다.
+   SHEET_KEY: 시트 코드의 KEY와 같은 값. 비워 두면 검사하지 않습니다. */
+const SHEET_URL = "";
+const SHEET_KEY = "";
+
+const KEY = ["r45as25","r45as45","r45as75"];
+const ORDER = ["r45as-15","r45as15","r45as25","r45as45","r45as75","r45as110"];
+const STORE = "cm_records_v1";
+const $ = id => document.getElementById(id);
+let current = null, records = [], worker = null;
+
+function load(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } }
+function persist(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+function num(v){ if(v===null||v===undefined||v==="") return null; const n = Number(String(v).replace(/[−–—~]/g,"-").replace(",",".")); return Number.isFinite(n) ? n : null; }
+function fmt(v){ const n = num(v); return n===null ? "" : n.toFixed(2); }
+function calc(r){ if([r.dL,r.da,r.db].some(x => x===null)) return null; return Math.sqrt(r.dL**2 + r.da**2 + r.db**2); }
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
+function showErr(msg){ $("err").textContent = msg; $("err").hidden = !msg; }
+
+/* ---------- 사진 판독 (휴대폰 안에서 Tesseract로) ---------- */
+
+function loadImage(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => resolve({ img, url });
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이 사진 형식은 읽을 수 없습니다. 다시 찍어 주세요.")); };
+    img.src = url;
+  });
+}
+
+/** 셀 배경이 빨강/흰색/회색으로 섞여 있어도 글자만 검게 남기는 지역 이진화 */
+function binarize(src){
+  const W = src.width, H = src.height;
+  const s = src.getContext("2d").getImageData(0, 0, W, H).data;
+  const gray = new Float32Array(W*H);
+  for(let i=0, p=0; i<gray.length; i++, p+=4) gray[i] = 0.299*s[p] + 0.587*s[p+1] + 0.114*s[p+2];
+  // 모아레 완화용 3x3 평균
+  const sm = new Float32Array(W*H);
+  for(let y=0; y<H; y++) for(let x=0; x<W; x++){
+    let t=0, c=0;
+    for(let dy=-1; dy<=1; dy++){ const yy=y+dy; if(yy<0||yy>=H) continue;
+      for(let dx=-1; dx<=1; dx++){ const xx=x+dx; if(xx<0||xx>=W) continue; t+=gray[yy*W+xx]; c++; } }
+    sm[y*W+x] = t/c;
+  }
+  // 적분 영상으로 주변 평균
+  const I = new Float64Array((W+1)*(H+1));
+  for(let y=1; y<=H; y++){ let row=0; for(let x=1; x<=W; x++){ row += sm[(y-1)*W+(x-1)]; I[y*(W+1)+x] = I[(y-1)*(W+1)+x] + row; } }
+  const r = Math.max(8, Math.round(Math.min(W,H)/30));
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const octx = out.getContext("2d"); const od = octx.createImageData(W, H); const o = od.data;
+  for(let y=0; y<H; y++){
+    const y0=Math.max(0,y-r), y1=Math.min(H,y+r+1);
+    for(let x=0; x<W; x++){
+      const x0=Math.max(0,x-r), x1=Math.min(W,x+r+1);
+      const m = (I[y1*(W+1)+x1]-I[y0*(W+1)+x1]-I[y1*(W+1)+x0]+I[y0*(W+1)+x0])/((y1-y0)*(x1-x0));
+      const g = sm[y*W+x];
+      const ink = m < 135 ? g > m + 28 : g < m - 28;
+      const p = (y*W+x)*4; const v = ink ? 0 : 255;
+      o[p]=o[p+1]=o[p+2]=v; o[p+3]=255;
+    }
+  }
+  octx.putImageData(od, 0, 0);
+  return out;
+}
+
+/** 원본에서 상자 안 빨강 비율 */
+function redRatio(ctx, b){
+  const pad = 4;
+  const x = Math.max(0, b.x0-pad), y = Math.max(0, b.y0-pad);
+  const w = Math.max(1, Math.min(ctx.canvas.width - x, b.x1-b.x0+pad*2)), h = Math.max(1, Math.min(ctx.canvas.height - y, b.y1-b.y0+pad*2));
+  const d = ctx.getImageData(x, y, w, h).data; let red=0, n=0;
+  for(let p=0; p<d.length; p+=4){ n++; if(d[p] > 140 && d[p] - Math.max(d[p+1], d[p+2]) > 60) red++; }
+  return red / n;
+}
+
+/** 표 테두리(긴 가로·세로 선)와 모아레 잡티 제거 */
+function cleanBin(bin){
+  const W = bin.width, H = bin.height, d = bin.getContext("2d").getImageData(0, 0, W, H).data;
+  let ink = new Uint8Array(W*H); for(let i=0; i<W*H; i++) ink[i] = d[i*4] === 0 ? 1 : 0;
+  const kill = new Uint8Array(W*H), hMin = Math.round(W*0.07), vMin = Math.round(H*0.04);
+  for(let y=0; y<H; y++){ let s=-1; for(let x=0; x<=W; x++){ const v = x<W && ink[y*W+x]; if(v && s<0) s=x; if(!v && s>=0){ if(x-s >= hMin) for(let k=s; k<x; k++) kill[y*W+k]=1; s=-1; } } }
+  for(let x=0; x<W; x++){ let s=-1; for(let y=0; y<=H; y++){ const v = y<H && ink[y*W+x]; if(v && s<0) s=y; if(!v && s>=0){ if(y-s >= vMin) for(let k=s; k<y; k++) kill[k*W+x]=1; s=-1; } } }
+  for(let i=0; i<W*H; i++) if(kill[i]) ink[i]=0;
+  for(let pass=0; pass<2; pass++){
+    const n = new Uint8Array(W*H);
+    for(let y=1; y<H-1; y++) for(let x=1; x<W-1; x++){ const i=y*W+x; if(!ink[i]) continue; let c=0; for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++) c += ink[i+dy*W+dx]; n[i] = c >= 4 ? 1 : 0; }
+    ink = n;
+  }
+  const lab = new Int32Array(W*H); let id = 0;
+  for(let i=0; i<W*H; i++){
+    if(!ink[i] || lab[i]) continue; id++; const pts = [i], st = [i]; lab[i] = id;
+    while(st.length){ const p = st.pop(); const x = p % W;
+      for(const q of [p-1, p+1, p-W, p+W]){ if(q<0 || q>=W*H || Math.abs((q % W) - x) > 1) continue; if(ink[q] && !lab[q]){ lab[q]=id; st.push(q); pts.push(q); } } }
+    if(pts.length < 20) for(const p of pts) ink[p] = 0;
+  }
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const oc = out.getContext("2d", { willReadFrequently: true }); const od = oc.createImageData(W, H);
+  for(let i=0; i<W*H; i++){ const v = ink[i] ? 0 : 255; od.data[i*4]=od.data[i*4+1]=od.data[i*4+2]=v; od.data[i*4+3]=255; }
+  oc.putImageData(od, 0, 0); return out;
+}
+
+/** 글자 줄(행)과 줄 안의 덩어리(셀)를 나눔 */
+function segment(cl){
+  const W = cl.width, H = cl.height, d = cl.getContext("2d").getImageData(0, 0, W, H).data;
+  const ink = (x, y) => d[(y*W+x)*4] === 0;
+  const rowSum = new Int32Array(H); for(let y=0; y<H; y++){ let s=0; for(let x=0; x<W; x++) if(ink(x,y)) s++; rowSum[y]=s; }
+  const bands = []; let s = -1;
+  for(let y=0; y<=H; y++){ const on = y<H && rowSum[y] > 2; if(on && s<0) s=y; if(!on && s>=0){ if(y-s >= 15) bands.push([s,y]); s=-1; } }
+  return bands.map(([y0, y1]) => {
+    const bh = y1 - y0, col = new Int32Array(W);
+    for(let x=0; x<W; x++){ let c=0; for(let y=y0; y<y1; y++) if(ink(x,y)) c++; col[x]=c; }
+    const gap = Math.max(10, Math.round(bh*0.45)), segs = []; let a=-1, last=-1;
+    for(let x=0; x<W; x++){ if(col[x] > 0){ if(a<0) a=x; else if(x-last > gap){ segs.push([a, last+1]); a=x; } last=x; } }
+    if(a >= 0) segs.push([a, last+1]);
+    return { y0, y1, segs };
+  });
+}
+
+async function getWorker(){
+  if(worker) return worker;
+  $("busyText").textContent = "처음 한 번은 문자인식 데이터를 받느라 조금 더 걸립니다…";
+  worker = await Tesseract.createWorker("eng");
+  return worker;
+}
+
+async function cropOCR(cl, x0, y0, x1, y1, whitelist){
+  const pad = 12, sc = 1.5, c = document.createElement("canvas");
+  c.width = Math.round((x1-x0+pad*2)*sc); c.height = Math.round((y1-y0+pad*2)*sc);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(cl, x0, y0, x1-x0, y1-y0, pad*sc, pad*sc, (x1-x0)*sc, (y1-y0)*sc);
+  const w = await getWorker();
+  await w.setParameters({ tessedit_char_whitelist: whitelist, tessedit_pageseg_mode: "7" });
+  const { data } = await w.recognize(c);
+  return data.text.trim();
+}
+
+/** 셀 하나: 마이너스는 모양으로 직접 찾고, 숫자만 문자인식. 소수점은 항상 둘째 자리 */
+async function readValue(cl, seg, band){
+  const x0 = seg[0], x1 = seg[1], y0 = band.y0, w = x1-x0, h = band.y1-band.y0;
+  const d = cl.getContext("2d").getImageData(x0, y0, w, h).data;
+  const ink = (x, y) => d[(y*w+x)*4] === 0;
+  const rows = []; for(let y=0; y<h; y++){ let c=0; for(let x=0; x<w; x++) if(ink(x,y)) c++; rows.push(c); }
+  let best = [0, -1], s = -1;
+  for(let y=0; y<=h; y++){ const on = y<h && rows[y] > 0; if(on && s<0) s=y; if(!on && s>=0){ if(y-s > best[1]-best[0]) best=[s,y]; s=-1; } }
+  const top = best[0], bot = best[1]-1, th = bot-top+1;
+  if(th < 8) return null;
+  let run = 0, x = 0;
+  while(x < w){
+    let a=-1, z=-1; for(let y=top; y<=bot; y++) if(ink(x,y)){ if(a<0) a=y; z=y; }
+    if(a < 0){ if(run > 0) break; x++; continue; }
+    const cy = ((a+z)/2 - top)/th;
+    if(z-a+1 <= th*0.25 && cy > 0.3 && cy < 0.76){ run++; x++; } else break;
+  }
+  const neg = run >= th*0.2;
+  const colHas = cx => { for(let y=top; y<=bot; y++) if(ink(cx,y)) return true; return false; };
+  let xs = neg ? x : 0; while(xs < w && !colHas(xs)) xs++;
+  let xe = w-1; while(xe > xs && !colHas(xe)) xe--;
+  const t = await cropOCR(cl, x0+xs, y0+top, x0+xe+1, y0+bot+1, "0123456789");
+  const dg = t.replace(/\D/g, "");
+  if(dg.length < 3 || dg.length > 4) return null;
+  return Number(dg.slice(0,-2) + "." + dg.slice(-2)) * (neg ? -1 : 1);
+}
+
+async function ocr(file){
+  const { img, url } = await loadImage(file);
+  const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth*scale); c.height = Math.round(img.naturalHeight*scale);
+  const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, c.width, c.height);
+  const cl = cleanBin(binarize(c));
+  await getWorker();
+  $("busyText").textContent = "숫자를 읽는 중…";
+  const minW = cl.width*0.05, found = [];
+  for(const band of segment(cl)){
+    const segs = band.segs.filter(s => s[1]-s[0] >= minW);
+    if(segs.length < 5) continue;
+    const cells = segs.slice(-4), labelSeg = segs[segs.length-5];
+    const vals = []; for(const sg of cells) vals.push(await readValue(cl, sg, band));
+    if(vals.filter(v => v !== null).length < 3) continue;
+    const lt = await cropOCR(cl, labelSeg[0], band.y0, labelSeg[1], band.y1, "0123456789-ras");
+    const lm = lt.match(/as(-?\d{2,3})$/);
+    let angle = lm ? "r45as" + lm[1] : null;
+    if(angle && !ORDER.includes(angle)) angle = null;
+    const box = { x0: cells[0][0], y0: band.y0, x1: cells[0][1], y1: band.y1 };
+    found.push({ angle, y: band.y0, dE: vals[0], dL: vals[1], da: vals[2], db: vals[3],
+      status: redRatio(ctx, box) > 0.25 ? "fail" : "pass" });
+  }
+  // 6행이 다 읽혔으면 화면 순서대로 각도를 붙이고, 아니면 읽힌 라벨을 씁니다
+  if(found.length === ORDER.length) found.forEach((r, i) => { r.angle = ORDER[i]; });
+  const used = new Set(found.map(r => r.angle).filter(Boolean));
+  const left = ORDER.filter(a => !used.has(a));
+  found.forEach(r => { if(!r.angle) r.angle = left.shift() || "?"; });
+  return { rows: found.map(({ y, ...r }) => r), img: url };
+}
+
+async function readPhoto(file){
+  showErr("");
+  $("busy").hidden = false; $("shootBtn").classList.add("off");
+  $("busyText").textContent = "사진을 읽는 중…";
+  try{
+    if(typeof Tesseract === "undefined") throw new Error("문자인식 기능을 불러오지 못했습니다. 인터넷 연결을 확인하고 페이지를 새로 열어 주세요.");
+    const res = await ocr(file);
+    if(!res.rows.length){
+      showErr("표를 찾지 못했습니다. 표가 화면에 꽉 차게, 정면에서 다시 찍어 주세요. 계속 안 되면 '사진 없이 직접 입력'을 쓰세요.");
+      URL.revokeObjectURL(res.img); return;
+    }
+    const byAngle = {}; res.rows.forEach(r => byAngle[r.angle] = r);
+    const rows = ORDER.map(a => byAngle[a] || { angle: a, dE: null, dL: null, da: null, db: null, status: "pass", missing: true });
+    res.rows.filter(r => !ORDER.includes(r.angle)).forEach(r => rows.push(r));
+    setCurrent({ rows, img: res.img });
+  }catch(e){
+    showErr(e && e.message ? e.message : "사진을 읽지 못했습니다. 다시 찍어 주세요.");
+  }finally{
+    $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = "";
+  }
+}
+
+function setCurrent(c){
+  if(current && current.img) URL.revokeObjectURL(current.img);
+  current = c; renderReview();
+  $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------- 확인 표 ---------- */
+
+function renderReview(){
+  const c = current; $("reviewCard").hidden = false;
+  $("previewBox").hidden = !c.img; if(c.img) $("thumb").src = c.img;
+  const tb = $("rowsBody"); tb.textContent = "";
+  c.rows.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.className = (KEY.includes(r.angle) ? "key" : "minor") + (r.status === "fail" ? " fail" : "");
+    const a = document.createElement("td"); a.className = "ang"; a.textContent = r.angle; tr.append(a);
+    ["dE","dL","da","db"].forEach(k => {
+      const td = document.createElement("td"); const inp = document.createElement("input");
+      inp.className = "num"; inp.id = "v-" + i + "-" + k; inp.inputMode = "decimal"; inp.value = fmt(r[k]);
+      inp.setAttribute("aria-label", r.angle + " " + k);
+      inp.addEventListener("change", () => { r[k] = num(inp.value); r.missing = false; renderReview(); });
+      td.append(inp); tr.append(td);
+    });
+    const st = document.createElement("td"); const b = document.createElement("button");
+    b.className = "st"; b.type = "button";
+    const pill = document.createElement("span"); pill.className = "pill " + r.status; pill.textContent = r.status === "fail" ? "불합격" : "합격";
+    b.append(pill); b.addEventListener("click", () => { r.status = r.status === "fail" ? "pass" : "fail"; renderReview(); });
+    st.append(b); tr.append(st);
+    const ck = document.createElement("td"); const sp = document.createElement("span"); sp.className = "chk"; const v = calc(r);
+    if(v === null || r.dE === null){ sp.textContent = "값 없음"; }
+    else { const d = Math.abs(v - r.dE); if(d <= 0.02) sp.classList.add("ok"); sp.textContent = (d <= 0.02 ? "✓ " : "⚠ ") + d.toFixed(3); }
+    ck.append(sp); tr.append(ck); tb.append(tr);
+  });
+  const notes = [];
+  const missing = c.rows.filter(r => r.missing).map(r => r.angle);
+  if(c.img && missing.length) notes.push("사진에서 읽히지 않은 행: " + missing.join(", ") + ". 직접 입력해 주세요.");
+  const bad = c.rows.filter(r => !r.missing && r.dE !== null && calc(r) !== null && Math.abs(calc(r) - r.dE) > 0.02);
+  if(bad.length) notes.push("검산이 맞지 않는 행: " + bad.map(r => r.angle).join(", ") + ". 숫자가 잘못 읽혔을 수 있습니다.");
+  if(c.img) notes.push("검산은 마이너스 부호 오류를 잡지 못합니다. 부호는 화면과 직접 대조해 주세요.");
+  const ul = $("notes"); ul.textContent = ""; notes.forEach(n => { const li = document.createElement("li"); li.textContent = n; ul.append(li); }); ul.hidden = !notes.length;
+  const keyRows = c.rows.filter(r => KEY.includes(r.angle) && r.dE !== null);
+  const kf = keyRows.filter(r => r.status === "fail").map(r => r.angle.replace("r45as","") + "°");
+  const sum = $("mSummary"); sum.textContent = "";
+  if(keyRows.length){ const p = document.createElement("span"); p.className = "pill " + (kf.length ? "fail" : "pass"); p.textContent = kf.length ? "핵심 각도 불합격: " + kf.join(", ") : "핵심 각도 모두 합격"; sum.append(p); }
+}
+
+function save(){
+  if(!current) return;
+  const rows = current.rows.filter(r => [r.dE,r.dL,r.da,r.db].some(v => v !== null))
+    .map(({angle,dE,dL,da,db,status}) => ({angle,dE,dL,da,db,status}));
+  if(!rows.length){ toast("저장할 값이 없습니다"); return false; }
+  const person = $("person").value.trim();
+  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), time: Date.now(),
+    person, sample: $("sampleName").value.trim(), note: $("noteInput").value.trim(), rows,
+    sync: SHEET_URL ? "pending" : "off" };
+  records.unshift(rec);
+  if(!persist(STORE, records)){ records.shift(); showErr("이 브라우저에 저장하지 못했습니다. 개인정보 보호(시크릿) 모드라면 일반 모드로 열어 주세요."); return false; }
+  persist("cm_person", person);
+  discard(); $("noteInput").value = ""; renderHist(); toast(SHEET_URL ? "저장했습니다. 시트로 보내는 중…" : "저장했습니다");
+  if(SHEET_URL) sendToSheet(rec).then(ok => toast(ok ? "시트에 입력했습니다" : "시트 전송 실패. 기록에서 다시 보낼 수 있습니다"));
+  return true;
+}
+
+/* ---------- 구글 시트 전송 ---------- */
+
+function checkWarn(d){
+  return d.rows.filter(r => { const v = calc(r); return r.dE === null || v === null || Math.abs(v - r.dE) > 0.02; }).map(r => r.angle).join(", ");
+}
+
+let sending = new Set();
+async function sendToSheet(rec){
+  if(!SHEET_URL || sending.has(rec.id)) return false;
+  sending.add(rec.id); rec.sync = "sending"; renderHist();
+  let ok = false;
+  try{
+    const res = await fetch(SHEET_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ key: SHEET_KEY, id: rec.id, time: rec.time, person: rec.person, sample: rec.sample, note: rec.note,
+        keyResult: keyResult(rec), checkWarn: checkWarn(rec), rows: rec.rows })
+    });
+    const j = await res.json();
+    ok = !!(j && j.ok);
+  }catch(e){ ok = false; }
+  sending.delete(rec.id);
+  const r = records.find(x => x.id === rec.id);
+  if(r){ r.sync = ok ? "sent" : "failed"; persist(STORE, records); }
+  renderHist();
+  return ok;
+}
+
+async function resendAll(){
+  const list = records.filter(r => r.sync === "failed" || r.sync === "pending");
+  let n = 0; for(const r of list.slice().reverse()) if(await sendToSheet(r)) n++;
+  if(list.length) toast(n === list.length ? "시트에 " + n + "건 입력했습니다" : (list.length - n) + "건은 아직 보내지 못했습니다");
+}
+function discard(){ if(current && current.img) URL.revokeObjectURL(current.img); current = null; $("reviewCard").hidden = true; }
+
+/* ---------- 기록 ---------- */
+
+function renderHist(){
+  const h = $("hist"); h.textContent = "";
+  $("histBtns").hidden = !records.length;
+  if(!records.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "아직 저장된 측정이 없습니다. 위에서 색차계 화면을 찍으면 여기에 쌓이고, 엑셀로 내려받거나 공유할 수 있습니다."; h.append(p); return; }
+  records.forEach(d => {
+    const el = document.createElement("div"); el.className = "rec";
+    const top = document.createElement("div"); top.className = "rec-top";
+    const nm = document.createElement("span"); nm.className = "rec-name"; nm.textContent = d.sample || "(시료명 없음)";
+    const tm = document.createElement("span"); tm.className = "rec-time"; tm.textContent = new Date(d.time).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+    top.append(nm, tm); el.append(top);
+    const chips = document.createElement("div"); chips.className = "chips";
+    KEY.forEach(k => {
+      const r = d.rows.find(x => x.angle === k); const c = document.createElement("div");
+      c.className = "chip " + (r ? r.status : "none");
+      const s = document.createElement("small"); s.textContent = k.replace("r45as","") + "° dE";
+      const b = document.createElement("strong"); b.textContent = r ? fmt(r.dE) : "–";
+      c.append(s, b); chips.append(c);
+    });
+    el.append(chips);
+    const extra = [d.person, d.note].filter(Boolean).join(" · ");
+    if(extra){ const n = document.createElement("div"); n.className = "rec-note"; n.textContent = extra; el.append(n); }
+    const act = document.createElement("div"); act.className = "rec-act";
+    if(SHEET_URL && d.sync && d.sync !== "off"){
+      const sy = document.createElement("span"); sy.className = "sync " + d.sync;
+      sy.textContent = { sent: "시트 입력됨", sending: "시트로 보내는 중…", pending: "시트 전송 대기", failed: "시트 전송 실패" }[d.sync] || "";
+      act.append(sy);
+      if(d.sync === "failed" || d.sync === "pending"){
+        const rs = document.createElement("button"); rs.className = "btn small"; rs.type = "button"; rs.textContent = "다시 보내기";
+        rs.addEventListener("click", () => sendToSheet(d).then(ok => toast(ok ? "시트에 입력했습니다" : "보내지 못했습니다. 인터넷 연결을 확인해 주세요")));
+        act.append(rs);
+      }
+    }
+    const del = document.createElement("button"); del.className = "btn small"; del.type = "button"; del.textContent = "삭제";
+    del.addEventListener("click", () => {
+      act.textContent = "";
+      const q = document.createElement("span"); q.textContent = "이 기록을 지울까요?";
+      const no = document.createElement("button"); no.className = "btn small"; no.type = "button"; no.textContent = "취소"; no.addEventListener("click", renderHist);
+      const yes = document.createElement("button"); yes.className = "btn small danger"; yes.type = "button"; yes.textContent = "삭제";
+      yes.addEventListener("click", () => { records = records.filter(x => x.id !== d.id); persist(STORE, records); renderHist(); toast("삭제했습니다"); });
+      act.append(q, no, yes);
+    });
+    act.append(del); el.append(act); h.append(el);
+  });
+}
+
+function keyResult(d){
+  const k = d.rows.filter(r => KEY.includes(r.angle));
+  if(k.length < KEY.length) return "각도 누락";
+  return k.some(r => r.status === "fail") ? "불합격" : "합격";
+}
+
+function buildXlsx(){
+  const head = ["일시","측정자","시료","메모","핵심각도판정","검산경고"];
+  ORDER.forEach(a => head.push(a+" dE", a+" dL", a+" da", a+" db", a+" 판정"));
+  const aoa = [head];
+  records.slice().reverse().forEach(d => {
+    const row = [new Date(d.time), d.person, d.sample, d.note, keyResult(d), checkWarn(d)];
+    ORDER.forEach(a => { const r = d.rows.find(x => x.angle === a); row.push(r ? r.dE : null, r ? r.dL : null, r ? r.da : null, r ? r.db : null, r ? (r.status === "fail" ? "불합격" : "합격") : null); });
+    aoa.push(row);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true, dateNF: "yyyy-mm-dd hh:mm" });
+  ws["!cols"] = head.map((h, i) => ({ wch: i === 0 ? 17 : i < 6 ? 12 : 9 }));
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "측정기록");
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const name = "색차측정_" + new Date().toISOString().slice(0,10) + ".xlsx";
+  return new File([buf], name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function downloadXlsx(){
+  if(typeof XLSX === "undefined"){ toast("엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
+  const f = buildXlsx(); const url = URL.createObjectURL(f);
+  const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function shareXlsx(){
+  if(typeof XLSX === "undefined"){ toast("엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
+  const f = buildXlsx();
+  if(navigator.canShare && navigator.canShare({ files: [f] })){
+    try{ await navigator.share({ files: [f], title: "색차 측정 기록" }); }
+    catch(e){ if(e && e.name !== "AbortError") downloadXlsx(); }
+  } else {
+    downloadXlsx(); toast("이 기기는 바로 공유가 안 돼서 파일로 내려받았습니다");
+  }
+}
+
+/* ---------- 시작 ---------- */
+
+/* 저장 안 한 측정이 있으면 새 사진·직접 입력 전에 경고 */
+let pendingNext = null;
+function startManual(){ showErr(""); setCurrent({ rows: ORDER.map(a => ({ angle: a, dE: null, dL: null, da: null, db: null, status: "pass" })), img: null }); }
+function askPending(next){ pendingNext = next; $("pendingBox").hidden = false; $("pendSave").focus(); }
+function closePending(){ $("pendingBox").hidden = true; const n = pendingNext; pendingNext = null; return n; }
+function runNext(n){ if(n === "photo") $("photo").click(); else if(n === "manual") startManual(); }
+
+$("photo").addEventListener("click", e => { if(current){ e.preventDefault(); askPending("photo"); } });
+$("photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) readPhoto(f); });
+$("manualBtn").addEventListener("click", () => { if(current) askPending("manual"); else startManual(); });
+$("pendSave").addEventListener("click", () => { const n = closePending(); if(save()) runNext(n); else $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }); });
+$("pendDrop").addEventListener("click", () => { const n = closePending(); discard(); runNext(n); });
+$("pendCancel").addEventListener("click", () => { closePending(); $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }); });
+window.addEventListener("beforeunload", e => { if(current){ e.preventDefault(); e.returnValue = ""; } });
+$("saveBtn").addEventListener("click", save);
+$("discardBtn").addEventListener("click", discard);
+$("xlsxBtn").addEventListener("click", downloadXlsx);
+$("shareBtn").addEventListener("click", shareXlsx);
+
+records = load(STORE, []);
+if(!Array.isArray(records)) records = [];
+$("person").value = load("cm_person", "") || "";
+records.forEach(r => { if(r.sync === "sending") r.sync = "pending"; if(SHEET_URL && !r.sync) r.sync = "pending"; });
+renderHist();
+// 지난번에 못 보낸 기록은 열 때와 인터넷이 다시 연결될 때 자동으로 다시 보냅니다
+if(SHEET_URL){ resendAll(); window.addEventListener("online", resendAll); }
+</script>
+</body>
+</html>
