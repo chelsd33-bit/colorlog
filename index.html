@@ -6,42 +6,68 @@
 <title>색차 측정 기록</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: single column instrument log — capture, review table, device-local history with Excel export */
+/* Layout: 입력 정보 카드 → 전체화면 확인·입력(사진 + 각도×값 표 + 숫자판) → 기기 내 기록과 엑셀/시트 */
 :root{
   --bg:#f3f4f2; --surface:#ffffff; --ink:#1b2124; --muted:#5d686d; --line:#d9dedc;
-  --accent:#1f5f74; --accent-ink:#ffffff;
+  --accent:#1f5f74; --accent-ink:#ffffff; --accent-soft:#dcecf1;
   --fail:#c8321f; --fail-soft:#fbe5e1; --pass:#2c7a4b; --pass-soft:#e2f2e8; --warn:#9a6a00; --warn-soft:#fbf0d2;
+  --key:#e6e9e7; --photo:#0f1315;
   --sans:"IBM Plex Sans KR",system-ui,-apple-system,"Malgun Gothic",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#121618; --surface:#1b2124; --ink:#e7ecec; --muted:#9aa6aa; --line:#2e373a;
-  --accent:#6fb3c9; --accent-ink:#0d1a1f;
+  --accent:#6fb3c9; --accent-ink:#0d1a1f; --accent-soft:#1d3640;
   --fail:#ff7b67; --fail-soft:#3b1e19; --pass:#6fcf95; --pass-soft:#173023; --warn:#e6b84a; --warn-soft:#352a10;
+  --key:#262e31; --photo:#000;
   color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+body.lock{overflow:hidden}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(48px + env(safe-area-inset-bottom,0px));display:grid;gap:20px}
 header{display:grid;gap:4px}
 h1{font-size:22px;font-weight:700;margin:0}
 .sub{color:var(--muted);font-size:13px;margin:0}
 h2{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
-.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .fields .wide{grid-column:1/-1}
-@media (max-width:480px){.fields{grid-template-columns:1fr}}
-label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-input[type=text],input.num{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
-input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:420px){.fields{grid-template-columns:1fr}}
+label.f,.f{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+input[type=text],input[type=date],select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0;min-height:42px}
+#color{text-transform:uppercase;font-family:var(--mono)}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+@media (max-width:360px){.chips{grid-template-columns:repeat(3,1fr)}}
+.cc{font:inherit;border:1px solid rgba(128,128,128,.45);background:var(--c);color:var(--t);border-radius:8px;padding:5px 2px;display:grid;justify-items:center;cursor:pointer;min-height:50px;touch-action:manipulation;position:relative}
+.cc b{font-family:var(--mono);font-size:14px;font-weight:600;line-height:1.25}
+.cc small{font-size:10.5px;opacity:.9;line-height:1.2;text-align:center;overflow-wrap:anywhere}
+.cc.on{outline:3px solid var(--accent);outline-offset:2px}
+.cc.on::after{content:"✓";position:absolute;top:-7px;right:-5px;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:700;display:grid;place-items:center;line-height:1}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:flex;gap:6px}
+.seg label{flex:1;position:relative}
+.seg input{position:absolute;opacity:0;inset:0}
+.seg span{display:block;text-align:center;padding:9px 0;border:1px solid var(--line);border-radius:6px;font-weight:600;color:var(--ink);background:var(--bg);font-family:var(--mono)}
+.seg input:checked + span{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.pchips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.pc{font:inherit;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;min-height:46px;cursor:pointer;display:grid;place-items:center;line-height:1.15;position:relative;touch-action:manipulation}
+.pc b{font-family:var(--mono);font-size:17px}
+.pc small{font-size:10.5px;color:var(--muted)}
+.pc.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pc.on small{color:var(--accent-ink)}
+.pc.done::after{content:"✓";position:absolute;top:-7px;right:-5px;width:18px;height:18px;border-radius:50%;background:var(--pass);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
+.pc.done.fail::after{background:var(--fail);content:"!"}
 .shoot{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:16px;font-size:17px;font-weight:600;cursor:pointer;position:relative}
 .shoot:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .shoot.off{opacity:.55;pointer-events:none}
 .shoot input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .shoot svg{width:22px;height:22px}
-.row2{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.row2{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.linkbtn{font:inherit;font-size:14px;background:none;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;padding:4px 0;position:relative}
+.linkbtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .hint{font-size:13px;color:var(--muted);margin:10px 0 0}
-.linkbtn{font:inherit;font-size:13px;background:none;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;padding:0}
 .status{display:flex;align-items:center;gap:10px;font-size:14px;margin-top:12px}
 .spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -50,58 +76,83 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline
 .pending{background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn);border-radius:8px;padding:12px;margin-top:12px;display:grid;gap:10px}
 .pending p{margin:0;font-size:14px}
 .pending b{color:var(--warn)}
-.pending .actions{margin-top:0}
-.preview{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
-.preview img{width:72px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
-.meta{font-size:13px;color:var(--muted);display:grid;gap:6px;min-width:0}
-.tbl-wrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
-th,td{padding:6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th{font-size:12px;font-weight:600;color:var(--muted)}
-th:first-child,td:first-child{text-align:left}
-td.ang{font-family:var(--mono);font-size:13px}
-tr.key td.ang{font-weight:600}
-tr.key td.ang::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle}
-tr.minor{color:var(--muted)}
-input.num{font-family:var(--mono);font-size:14px;text-align:right;width:76px;padding:5px 6px}
-tr.fail input.num{border-color:var(--fail)}
-.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:6px 10px;font-size:13px;font-weight:500}
+.btn.danger{color:var(--fail);border-color:var(--fail)}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .pill.fail{background:var(--fail-soft);color:var(--fail)}
 .pill.pass{background:var(--pass-soft);color:var(--pass)}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
-button.st{font:inherit;border:0;cursor:pointer;background:none;padding:0}
-.chk{font-size:12px;color:var(--warn)}
-.chk.ok{color:var(--muted)}
-.notes{font-size:13px;color:var(--warn);margin:10px 0 0;padding-left:18px}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.btn:disabled{opacity:.5;cursor:default}
-.btn.small{padding:6px 10px;font-size:13px;font-weight:500}
-.btn.danger{color:var(--fail);border-color:var(--fail)}
+
+/* 기록 */
 .histhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .histhead h2{margin:0}
-.histbtns{display:flex;gap:8px;flex-wrap:wrap}
+.histbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.histbtns select{width:auto;min-height:34px;padding:4px 8px;font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:12px 0;margin:0}
 .rec{border-top:1px solid var(--line);padding:12px 0;display:grid;gap:8px}
 .rec:first-child{border-top:0;padding-top:0}
 .rec-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
 .rec-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
-.rec-time{font-size:12px;color:var(--muted);font-family:var(--mono)}
-.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.chip{border-radius:6px;padding:6px 8px;display:grid;font-variant-numeric:tabular-nums}
-.chip.fail{background:var(--fail-soft);color:var(--fail)}
-.chip.pass{background:var(--pass-soft);color:var(--pass)}
-.chip.none{background:var(--bg);color:var(--muted)}
-.chip small{font-family:var(--mono);font-size:11px;opacity:.85}
-.chip strong{font-family:var(--mono);font-size:16px}
+.rec-name small{font-family:var(--mono);font-weight:500;color:var(--muted);margin-left:6px}
+.kchips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.kchip{border-radius:6px;padding:6px 8px;display:grid;font-variant-numeric:tabular-nums;background:var(--bg);color:var(--muted)}
+.kchip.fail{background:var(--fail-soft);color:var(--fail)}
+.kchip.pass{background:var(--pass-soft);color:var(--pass)}
+.kchip small{font-family:var(--mono);font-size:11px;opacity:.85}
+.kchip strong{font-family:var(--mono);font-size:16px}
 .rec-note{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .rec-act{display:flex;gap:8px;justify-content:flex-end;align-items:center;font-size:13px;flex-wrap:wrap}
 .sync{font-size:12px;font-weight:600;margin-right:auto}
 .sync.sent{color:var(--pass)}
 .sync.pending,.sync.sending{color:var(--muted)}
 .sync.failed{color:var(--fail)}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px)}
+
+/* 전체화면 확인·입력 */
+.ov{position:fixed;inset:0;z-index:10;background:var(--bg);display:flex;flex-direction:column;height:100dvh;padding-top:env(safe-area-inset-top,0px)}
+.ov-top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.ov-title{flex:1;min-width:0;display:grid;line-height:1.3}
+.ov-title strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov-title span{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph{position:relative;flex:1 1 0;min-height:110px;background:var(--photo)}
+.ph-scroll{position:absolute;inset:0;overflow:auto;touch-action:manipulation;overscroll-behavior:contain}
+.ph-scroll img{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-select:none}
+.ph-tools{position:absolute;right:8px;bottom:8px;display:flex;gap:6px}
+.ph-tools button{width:40px;height:40px;border-radius:8px;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:20px;cursor:pointer;display:grid;place-items:center}
+.ph-tools button svg{width:20px;height:20px}
+.ph-zoom{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;border-radius:6px;padding:4px 8px;font-family:var(--mono)}
+.ov.nophoto .ph{display:none}
+.ov.nophoto .grid{flex:1 1 auto;max-height:none;align-content:start}
+.grid{display:grid;grid-template-columns:minmax(58px,.9fr) repeat(4,minmax(0,1fr));gap:4px;padding:8px 10px;max-height:44vh;overflow-y:auto;background:var(--surface);border-top:1px solid var(--line);align-content:start}
+.gh{font-size:11px;color:var(--muted);font-family:var(--mono);text-align:center;padding-bottom:2px;position:sticky;top:-8px;background:var(--surface);z-index:1}
+.lab{font:inherit;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:2px 4px;display:grid;justify-items:start;align-content:center;cursor:pointer;min-height:44px;text-align:left}
+.lab b{font-family:var(--mono);font-size:14px;line-height:1.15}
+.lab small{font-size:10.5px;font-weight:600;line-height:1.2}
+.lab.key b::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:middle}
+.lab.pass small{color:var(--pass)}
+.lab.fail{background:var(--fail-soft);border-color:var(--fail)}
+.lab.fail small{color:var(--fail)}
+.lab .chk{color:var(--warn)}
+.cell{font:inherit;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:2px 4px;cursor:pointer;min-height:44px;font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:0;overflow:hidden}
+.cell.empty{color:var(--muted);font-weight:400;text-align:center}
+.cell.auto{border-style:dashed}
+.cell.rowfail{color:var(--fail)}
+.cell.cur{border-color:var(--accent);border-style:solid;box-shadow:0 0 0 2px var(--accent);background:var(--accent-soft)}
+.cell.typing{color:var(--accent)}
+.ov-stat{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;padding:6px 12px;font-size:13px;color:var(--muted);background:var(--surface)}
+.ov-stat .done{color:var(--pass);font-weight:600}
+.ov-confirm{margin:0 12px 8px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:10px;display:grid;gap:8px;font-size:14px}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line)}
+.pad button{font:inherit;font-size:24px;font-weight:600;font-family:var(--mono);height:52px;border-radius:8px;border:0;background:var(--key);color:var(--ink);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.pad button:active{filter:brightness(.88)}
+.pad button.fn{font-family:var(--sans);font-size:15px;background:var(--bg);border:1px solid var(--line)}
+.pad button.go{font-family:var(--sans);font-size:16px;background:var(--accent);color:var(--accent-ink)}
+.pad button.go.ready{box-shadow:0 0 0 3px var(--accent-soft)}
+@media (max-height:680px){.pad button{height:44px}.grid{max-height:40vh}.cell,.lab{min-height:38px}}
+
+.toast{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -109,64 +160,68 @@ button.st{font:inherit;border:0;cursor:pointer;background:none;padding:0}
 <div class="wrap">
   <header>
     <h1>색차 측정 기록</h1>
-    <p class="sub">색차계 화면을 찍으면 ΔE*ab 값이 표에 들어갑니다. 핵심 각도는 25°, 45°, 75°입니다. 사진과 기록은 이 휴대폰 밖으로 나가지 않습니다.</p>
+    <p class="sub">색차계 화면을 찍으면 ΔE*ab 값이 자동으로 채워집니다. 사진을 보며 확인하고 숫자판으로 고친 뒤 저장하세요. 핵심 각도는 25°, 45°, 75°입니다.</p>
   </header>
 
   <section class="card">
     <h2>새 측정</h2>
     <div class="fields">
-      <label class="f">측정자<input type="text" id="person" placeholder="이름 또는 소속" autocomplete="off" maxlength="40"></label>
-      <label class="f">시료 / 로트<input type="text" id="sampleName" placeholder="예: LOT-2410-A" autocomplete="off" maxlength="80"></label>
-      <label class="f wide">메모<input type="text" id="noteInput" placeholder="선택" autocomplete="off" maxlength="200"></label>
+      <label class="f">품명<select id="product"></select></label>
+      <label class="f">측정일자<input type="date" id="date"></label>
+      <div class="f wide" id="sideBox" role="radiogroup" aria-label="위치">위치
+        <div class="seg">
+          <label><input type="radio" name="side" value="LH"><span>LH</span></label>
+          <label><input type="radio" name="side" value="RH"><span>RH</span></label>
+        </div>
+      </div>
+      <div class="f wide"><span>측정 포인트 <span id="pointHint"></span></span>
+        <div class="pchips" id="pointChips" role="radiogroup" aria-label="측정 포인트"></div>
+      </div>
+      <div class="f wide">
+        <label class="f" for="color">칼라 (아래에서 고르거나 직접 입력)</label>
+        <input type="text" id="color" list="colorList" placeholder="예: NCM" autocomplete="off" autocapitalize="characters" maxlength="20">
+        <div class="chips" id="colorChips" role="group" aria-label="칼라 고르기"></div>
+      </div>
+      <label class="f">시료 / 로트<input type="text" id="sampleName" placeholder="선택" autocomplete="off" maxlength="80"></label>
+      <label class="f">측정자<input type="text" id="person" placeholder="선택" autocomplete="off" maxlength="40"></label>
+      <label class="f wide">비고<input type="text" id="note" placeholder="선택" autocomplete="off" maxlength="60"></label>
     </div>
+    <datalist id="colorList"></datalist>
+
     <label class="shoot" id="shootBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-      <span>화면 사진 찍기</span>
-      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 사진 찍기">
+      <span>색차계 화면 찍고 입력</span>
+      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍고 입력">
     </label>
     <div class="row2">
-      <span class="hint" style="margin:0">표가 화면에 꽉 차게, 정면에서 반사 없이 찍으면 잘 읽힙니다.</span>
-      <button class="linkbtn" id="manualBtn" type="button">사진 없이 직접 입력</button>
+      <span class="linkbtn">앨범에서 사진 고르기<input type="file" id="album" accept="image/*" aria-label="앨범에서 사진 고르기"></span>
+      <button class="linkbtn" id="manualBtn" type="button">사진 없이 입력</button>
     </div>
+    <p class="hint">표가 화면에 꽉 차게, 정면에서 반사 없이 찍으면 잘 읽힙니다.</p>
     <div class="status" id="busy" hidden><div class="spin"></div><span id="busyText">사진을 읽는 중…</span></div>
-    <div class="pending" id="pendingBox" role="alert" hidden>
-      <p><b>저장하지 않은 측정이 있습니다.</b> 아래 확인 표의 값이 저장되지 않았습니다. 새로 시작하면 이 값은 사라집니다.</p>
+    <div class="pending" id="draftBox" role="status" hidden>
+      <p><b>작성 중인 측정이 있습니다.</b> <span id="draftText"></span></p>
       <div class="actions">
-        <button class="btn primary small" id="pendSave" type="button">저장하고 새로 시작</button>
-        <button class="btn small" id="pendDrop" type="button">저장하지 않고 새로 시작</button>
+        <button class="btn primary small" id="draftResume" type="button">이어서 입력</button>
+        <button class="btn small" id="draftDrop" type="button">버리기</button>
+      </div>
+    </div>
+    <div class="pending" id="pendingBox" role="alert" hidden>
+      <p><b>저장하지 않은 측정이 있습니다.</b> 새로 시작하면 지금까지 입력한 값이 사라집니다.</p>
+      <div class="actions">
+        <button class="btn primary small" id="pendResume" type="button">이어서 입력</button>
+        <button class="btn small" id="pendDrop" type="button">버리고 새로 시작</button>
         <button class="btn small" id="pendCancel" type="button">취소</button>
       </div>
     </div>
     <div class="err" id="err" hidden></div>
   </section>
 
-  <section class="card" id="reviewCard" hidden>
-    <h2>읽은 값 확인</h2>
-    <div class="preview" id="previewBox">
-      <img id="thumb" alt="촬영한 색차계 화면">
-      <div class="meta">
-        <span>사진 판독은 틀릴 수 있습니다. 화면과 숫자, 특히 마이너스 부호를 꼭 대조해 주세요.</span>
-        <span id="mSummary"></span>
-      </div>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>각도</th><th>dE</th><th>dL</th><th>da</th><th>db</th><th>판정</th><th>검산</th></tr></thead>
-        <tbody id="rowsBody"></tbody>
-      </table>
-    </div>
-    <ul class="notes" id="notes" hidden></ul>
-    <p class="hint">숫자를 눌러 고칠 수 있고, 판정 배지를 누르면 합격/불합격이 바뀝니다. 검산은 dE와 √(dL²+da²+db²)의 차이입니다.</p>
-    <div class="actions">
-      <button class="btn primary" id="saveBtn" type="button">기록 저장</button>
-      <button class="btn" id="discardBtn" type="button">버리기</button>
-    </div>
-  </section>
-
   <section class="card">
     <div class="histhead">
       <h2>측정 기록 (이 휴대폰)</h2>
       <div class="histbtns" id="histBtns" hidden>
+        <select id="filter" aria-label="품명으로 거르기"></select>
         <button class="btn small primary" id="shareBtn" type="button">엑셀 공유</button>
         <button class="btn small" id="xlsxBtn" type="button">엑셀 내려받기</button>
       </div>
@@ -174,30 +229,84 @@ button.st{font:inherit;border:0;cursor:pointer;background:none;padding:0}
     <div id="hist"></div>
   </section>
 </div>
+
+<div class="ov" id="entry" role="dialog" aria-modal="true" aria-labelledby="ovTitle" hidden>
+  <div class="ov-top">
+    <div class="ov-title"><strong id="ovTitle"></strong><span id="ovMeta"></span></div>
+    <button class="btn small" id="ovClose" type="button">닫기</button>
+  </div>
+  <div class="ph">
+    <div class="ph-scroll" id="phScroll"><img id="phImg" alt="색차계 화면 사진" draggable="false"></div>
+    <span class="ph-zoom" id="phZoom">1×</span>
+    <div class="ph-tools">
+      <button type="button" id="zOut" aria-label="축소">−</button>
+      <button type="button" id="zIn" aria-label="확대">+</button>
+      <button type="button" id="rot" aria-label="사진 돌리기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="ov-stat" id="ovStat" aria-live="polite"></div>
+  <div class="ov-confirm" id="ovConfirm" role="alert" hidden>
+    <span id="ovConfirmText"></span>
+    <div class="actions">
+      <button class="btn small primary" id="ovSaveAnyway" type="button">그래도 저장</button>
+      <button class="btn small" id="ovKeep" type="button">계속 입력</button>
+    </div>
+  </div>
+  <div class="pad" id="pad">
+    <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" class="fn" data-k="back" aria-label="지우기">⌫</button>
+    <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" class="fn" data-k="prev">◀ 이전</button>
+    <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" class="fn" data-k="next">다음 ▶</button>
+    <button type="button" class="fn" data-k="neg" aria-label="부호 바꾸기">+/−</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" class="go" data-k="save" id="saveKey">저장</button>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-/* ===== 구글 시트 연결 설정 (관리자가 채움) =====
-   SHEET_URL: 시트의 Apps Script를 "웹 앱"으로 배포하고 받은 주소 (…/exec). 비워 두면 시트 전송을 쓰지 않습니다.
+/* ===== 관리자 설정 =====
+   SHEET_URL: 구글 시트의 Apps Script를 "웹 앱"으로 배포하고 받은 주소 (…/exec). 비워 두면 시트 전송을 쓰지 않습니다.
    SHEET_KEY: 시트 코드의 KEY와 같은 값. 비워 두면 검사하지 않습니다. */
-const SHEET_URL = "";
-const SHEET_KEY = "";
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbzWcIgH1kunyEb8ThqgxOOluAsn_xMbkon5OKY9NxSlJa9Jf9NmENbCamVD5fiTB8U_/exec";
+const SHEET_KEY = "jgcolor-c6100f8f";
+/* 품명별 측정 포인트 수 (JG 색차 측정 포인트 표), 위치(LH/RH) 구분 여부 */
+const PRODUCTS = [
+  { name: "JG H/L",     points: 5, side: false },
+  { name: "JG R/C I/S", points: 5, side: false },
+  { name: "JG R/C O/S", points: 5, side: true },
+  { name: "JG S/REP",   points: 3, side: true },
+];
+/* [코드, 이름, 실제 색]. PAQ 앱과 같은 현장 색상표 */
+const COLORS = [
+  ["PH3","비크블랙","#202226"], ["UYH","우유니 화이트","#f0f0ee"], ["FT7(무)","마테호른 화이트","#edeff1"], ["SSS","세빌 실버","#c0bfc6"],
+  ["NCM","마칼루 그레이","#7a7584"], ["MPE(무)","마칼루 그레이 매트","#6e6975"], ["NRB","카디프 블루","#141b5c"], ["HT7","카디프 그린","#1f2b29"],
+  ["SMZ(무)","모나쉬 실버","#9f9aa5"], ["VET","바에나 그린","#5d6b3c"], ["NAE","세이셸 베이지","#bdb092"], ["DAL","자이푸르 로즈","#8b7b88"],
+  ["BCA","소노란 네이비","#25214d"], ["MAB","벨라 버건디","#6a1d25"], ["CBA","코모 블루","#7e86a6"], ["LAG","타우포 그레이","#4b4a6b"],
+];
 
 const KEY = ["r45as25","r45as45","r45as75"];
 const ORDER = ["r45as-15","r45as15","r45as25","r45as45","r45as75","r45as110"];
-const STORE = "cm_records_v1";
+const COLS = ["dE","dL","da","db"];
+const STORE = "cm_records_v1", FSTORE = "cm_form_v1", DSTORE = "cm_draft_v1";
 const $ = id => document.getElementById(id);
-let current = null, records = [], worker = null;
+let current = null, records = [], worker = null;   // current = 작성 중 측정 {rows, img}
+let cur = 0, buf = "", zoom = 1, confirmShown = false, formReady = false, pendingNext = null;
 
 function load(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } }
 function persist(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+function drop(k){ try{ localStorage.removeItem(k); }catch(e){} }
 function num(v){ if(v===null||v===undefined||v==="") return null; const n = Number(String(v).replace(/[−–—~]/g,"-").replace(",",".")); return Number.isFinite(n) ? n : null; }
 function fmt(v){ const n = num(v); return n===null ? "" : n.toFixed(2); }
 function calc(r){ if([r.dL,r.da,r.db].some(x => x===null)) return null; return Math.sqrt(r.dL**2 + r.da**2 + r.db**2); }
+function badCheck(r){ const v = calc(r); return r.dE !== null && v !== null && Math.abs(v - r.dE) > 0.02; }
+function today(){ const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function md(s){ const p = String(s || "").split("-"); return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : s; }
+function short(a){ return a.replace("r45as","") + "°"; }
 function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
 function showErr(msg){ $("err").textContent = msg; $("err").hidden = !msg; }
+function el(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text !== undefined) e.textContent = text; return e; }
+function inkOn(hex){ const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#111" : "#fff"; }
 
 /* ---------- 사진 판독 (휴대폰 안에서 Tesseract로) ---------- */
 
@@ -375,96 +484,345 @@ async function ocr(file){
   return { rows: found.map(({ y, ...r }) => r), img: url };
 }
 
-async function readPhoto(file){
-  showErr("");
-  $("busy").hidden = false; $("shootBtn").classList.add("off");
-  $("busyText").textContent = "사진을 읽는 중…";
-  try{
-    if(typeof Tesseract === "undefined") throw new Error("문자인식 기능을 불러오지 못했습니다. 인터넷 연결을 확인하고 페이지를 새로 열어 주세요.");
-    const res = await ocr(file);
-    if(!res.rows.length){
-      showErr("표를 찾지 못했습니다. 표가 화면에 꽉 차게, 정면에서 다시 찍어 주세요. 계속 안 되면 '사진 없이 직접 입력'을 쓰세요.");
-      URL.revokeObjectURL(res.img); return;
-    }
-    const byAngle = {}; res.rows.forEach(r => byAngle[r.angle] = r);
-    const rows = ORDER.map(a => byAngle[a] || { angle: a, dE: null, dL: null, da: null, db: null, status: "pass", missing: true });
-    res.rows.filter(r => !ORDER.includes(r.angle)).forEach(r => rows.push(r));
-    setCurrent({ rows, img: res.img });
-  }catch(e){
-    showErr(e && e.message ? e.message : "사진을 읽지 못했습니다. 다시 찍어 주세요.");
-  }finally{
-    $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = "";
-  }
-}
 
-function setCurrent(c){
-  if(current && current.img) URL.revokeObjectURL(current.img);
-  current = c; renderReview();
-  $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" });
-}
+/* ---------- 입력 정보 ---------- */
 
-/* ---------- 확인 표 ---------- */
-
-function renderReview(){
-  const c = current; $("reviewCard").hidden = false;
-  $("previewBox").hidden = !c.img; if(c.img) $("thumb").src = c.img;
-  const tb = $("rowsBody"); tb.textContent = "";
-  c.rows.forEach((r, i) => {
-    const tr = document.createElement("tr");
-    tr.className = (KEY.includes(r.angle) ? "key" : "minor") + (r.status === "fail" ? " fail" : "");
-    const a = document.createElement("td"); a.className = "ang"; a.textContent = r.angle; tr.append(a);
-    ["dE","dL","da","db"].forEach(k => {
-      const td = document.createElement("td"); const inp = document.createElement("input");
-      inp.className = "num"; inp.id = "v-" + i + "-" + k; inp.inputMode = "decimal"; inp.value = fmt(r[k]);
-      inp.setAttribute("aria-label", r.angle + " " + k);
-      inp.addEventListener("change", () => { r[k] = num(inp.value); r.missing = false; renderReview(); });
-      td.append(inp); tr.append(td);
-    });
-    const st = document.createElement("td"); const b = document.createElement("button");
-    b.className = "st"; b.type = "button";
-    const pill = document.createElement("span"); pill.className = "pill " + r.status; pill.textContent = r.status === "fail" ? "불합격" : "합격";
-    b.append(pill); b.addEventListener("click", () => { r.status = r.status === "fail" ? "pass" : "fail"; renderReview(); });
-    st.append(b); tr.append(st);
-    const ck = document.createElement("td"); const sp = document.createElement("span"); sp.className = "chk"; const v = calc(r);
-    if(v === null || r.dE === null){ sp.textContent = "값 없음"; }
-    else { const d = Math.abs(v - r.dE); if(d <= 0.02) sp.classList.add("ok"); sp.textContent = (d <= 0.02 ? "✓ " : "⚠ ") + d.toFixed(3); }
-    ck.append(sp); tr.append(ck); tb.append(tr);
+function renderColorHints(){
+  const box = $("colorChips"); box.textContent = "";
+  COLORS.forEach(([code, name, hex]) => {
+    const b = el("button", "cc"); b.type = "button"; b.dataset.code = code; b.style.setProperty("--c", hex); b.style.setProperty("--t", inkOn(hex));
+    b.append(el("b", "", code), el("small", "", name));
+    b.addEventListener("click", () => { $("color").value = code; markColor(); saveForm(); });
+    box.append(b);
   });
-  const notes = [];
-  const missing = c.rows.filter(r => r.missing).map(r => r.angle);
-  if(c.img && missing.length) notes.push("사진에서 읽히지 않은 행: " + missing.join(", ") + ". 직접 입력해 주세요.");
-  const bad = c.rows.filter(r => !r.missing && r.dE !== null && calc(r) !== null && Math.abs(calc(r) - r.dE) > 0.02);
-  if(bad.length) notes.push("검산이 맞지 않는 행: " + bad.map(r => r.angle).join(", ") + ". 숫자가 잘못 읽혔을 수 있습니다.");
-  if(c.img) notes.push("검산은 마이너스 부호 오류를 잡지 못합니다. 부호는 화면과 직접 대조해 주세요.");
-  const ul = $("notes"); ul.textContent = ""; notes.forEach(n => { const li = document.createElement("li"); li.textContent = n; ul.append(li); }); ul.hidden = !notes.length;
-  const keyRows = c.rows.filter(r => KEY.includes(r.angle) && r.dE !== null);
-  const kf = keyRows.filter(r => r.status === "fail").map(r => r.angle.replace("r45as","") + "°");
-  const sum = $("mSummary"); sum.textContent = "";
-  if(keyRows.length){ const p = document.createElement("span"); p.className = "pill " + (kf.length ? "fail" : "pass"); p.textContent = kf.length ? "핵심 각도 불합격: " + kf.join(", ") : "핵심 각도 모두 합격"; sum.append(p); }
+  const known = new Set(COLORS.map(c => c[0]));
+  const dl = $("colorList"); dl.textContent = "";
+  [...new Set(records.map(r => r.color).filter(c => c && !known.has(c)))].sort().forEach(c => { const o = document.createElement("option"); o.value = c; dl.append(o); });
+  markColor();
+}
+function markColor(){
+  const v = $("color").value.trim().toUpperCase();
+  document.querySelectorAll("#colorChips .cc").forEach(b => { const on = b.dataset.code.toUpperCase() === v; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+}
+/* 품명 · 위치 · 측정 포인트 */
+let point = 1;
+function prod(name){ const n = name === undefined ? $("product").value : name; return PRODUCTS.find(p => p.name === n) || PRODUCTS[0]; }
+function sideVal(){ const r = document.querySelector('input[name=side]:checked'); return r ? r.value : ""; }
+function renderProducts(){
+  const sel = $("product"); sel.textContent = "";
+  PRODUCTS.forEach(p => sel.append(Object.assign(el("option", "", p.name), { value: p.name })));
+}
+function onProductChange(){
+  const p = prod();
+  $("sideBox").hidden = !p.side;
+  if(point > p.points) point = 1;
+  renderPoints(); saveForm();
+}
+/** 같은 날·품명·칼라·위치로 이미 저장한 포인트에 ✓ (불합격이면 !) */
+function donePoints(){
+  const m = meta(), map = {};
+  records.forEach(r => { if(r.product === m.product && r.date === m.date && r.color === m.color && (r.side || "") === m.side && r.point && !map[r.point]) map[r.point] = keyResult(r); });
+  return map;
+}
+function renderPoints(){
+  const p = prod(), box = $("pointChips"), done = donePoints(); box.textContent = "";
+  for(let i = 1; i <= p.points; i++){
+    const b = el("button", "pc" + (i === point ? " on" : "") + (done[i] ? " done" + (done[i] === "불합격" ? " fail" : "") : ""));
+    b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", i === point);
+    b.setAttribute("aria-label", "Point " + i + (done[i] ? ", 저장됨 " + done[i] : ""));
+    b.append(el("small", "", "Point"), el("b", "", i));
+    b.addEventListener("click", () => { point = i; renderPoints(); saveForm(); });
+    box.append(b);
+  }
+  const n = Object.keys(done).length;
+  $("pointHint").textContent = n ? "· 오늘 " + n + "/" + p.points + " 저장" : "";
+}
+function nextPoint(){
+  const p = prod(), done = donePoints();
+  for(let k = 1; k <= p.points; k++){ const i = (point + k - 1) % p.points + 1; if(!done[i]) return i; }
+  return point;
 }
 
-function save(){
+function saveForm(){
+  if(!formReady) return;
+  persist(FSTORE, { product: $("product").value, side: sideVal(), point, color: $("color").value, sample: $("sampleName").value, note: $("note").value, person: $("person").value });
+}
+function restoreForm(){
+  const f = load(FSTORE, {}) || {};
+  if(PRODUCTS.some(p => p.name === f.product)) $("product").value = f.product;
+  document.querySelectorAll('input[name=side]').forEach(r => r.checked = r.value === f.side);
+  point = Number(f.point) || 1;
+  $("color").value = f.color || ""; $("sampleName").value = f.sample || ""; $("note").value = f.note || ""; $("person").value = f.person || load("cm_person", "") || "";
+  $("date").value = today();
+}
+function meta(){
+  const p = prod();
+  return { product: p.name, side: p.side ? sideVal() : "", point, date: $("date").value, color: $("color").value.trim().toUpperCase(),
+    sample: $("sampleName").value.trim(), note: $("note").value.trim(), person: $("person").value.trim() };
+}
+function checkMeta(){
+  const m = meta();
+  if(!m.date) return "측정일자를 넣어 주세요.";
+  if(prod().side && !m.side) return "위치(LH/RH)를 골라 주세요.";
+  if(!m.color) return "칼라를 넣어 주세요.";
+  return "";
+}
+
+/* ---------- 작성 중 측정 ---------- */
+
+const N = ORDER.length * COLS.length;
+function emptyRows(){ return ORDER.map(a => ({ angle: a, dE: null, dL: null, da: null, db: null, status: "pass", auto: {} })); }
+function cellOf(i){ return { r: current.rows[Math.floor(i / 4)], k: COLS[i % 4] }; }
+function hasValues(){ return !!current && current.rows.some(r => COLS.some(k => r[k] !== null)); }
+function saveDraft(){ if(current) persist(DSTORE, { rows: current.rows }); }
+function newDraft(rows, img){
+  if(current && current.img) URL.revokeObjectURL(current.img);
+  current = { rows, img: img || null }; saveDraft();
+}
+function discardDraft(){
+  if(current && current.img) URL.revokeObjectURL(current.img);
+  current = null; drop(DSTORE); renderDraftBox();
+}
+function renderDraftBox(){
+  const show = hasValues() && $("entry").hidden;
+  $("draftBox").hidden = !show;
+  if(show){ const n = current.rows.reduce((s, r) => s + COLS.filter(k => r[k] !== null).length, 0); $("draftText").textContent = n + "/" + N + "칸 입력"; }
+}
+
+async function onPhoto(file){
+  showErr(""); $("busy").hidden = false; $("shootBtn").classList.add("off");
+  $("busyText").textContent = "사진을 읽는 중…";
+  let rows = emptyRows(), img = null, read = 0;
+  try{
+    if(typeof Tesseract === "undefined") throw new Error("noocr");
+    const res = await ocr(file);
+    img = res.img;
+    res.rows.forEach(o => {
+      const r = rows.find(x => x.angle === o.angle); if(!r) return;
+      COLS.forEach(k => { if(o[k] !== null && o[k] !== undefined){ r[k] = o[k]; r.auto[k] = true; read++; } });
+      r.status = o.status;
+    });
+  }catch(e){
+    if(!img){ try{ img = URL.createObjectURL(file); }catch(_){ img = null; } }
+  }finally{
+    $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = ""; $("album").value = "";
+  }
+  if(!img){ showErr("사진을 열지 못했습니다. 다시 찍어 주세요."); return; }
+  newDraft(rows, img); openEntry();
+  toast(read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요" : "숫자를 읽지 못했습니다. 사진을 보며 직접 입력해 주세요");
+}
+
+/* ---------- 사진 확대·회전 ---------- */
+
+function loadImg(src){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+async function rotatePhoto(){
+  if(!current || !current.img) return;
+  const img = await loadImg(current.img);
+  const c = document.createElement("canvas"); c.width = img.naturalHeight; c.height = img.naturalWidth;
+  const g = c.getContext("2d"); g.translate(c.width, 0); g.rotate(Math.PI/2); g.drawImage(img, 0, 0);
+  const url = await new Promise(r => c.toBlob(b => r(URL.createObjectURL(b)), "image/jpeg", 0.85));
+  URL.revokeObjectURL(current.img); current.img = url; $("phImg").src = url; setZoom(1);
+}
+function setZoom(z, cx, cy){
+  const sc = $("phScroll"), img = $("phImg");
+  z = Math.max(1, Math.min(5, z));
+  const W = sc.clientWidth, H = sc.clientHeight;
+  if(cx === undefined){ cx = W/2; cy = H/2; }
+  const fx = (sc.scrollLeft + cx) / (W*zoom), fy = (sc.scrollTop + cy) / (H*zoom);
+  zoom = z;
+  img.style.width = (W*z) + "px"; img.style.height = (H*z) + "px";
+  if(z === 1){ img.style.width = "100%"; img.style.height = "100%"; }
+  sc.scrollLeft = fx*W*z - cx; sc.scrollTop = fy*H*z - cy;
+  $("phZoom").textContent = (Math.round(z*10)/10) + "×";
+}
+let lastTap = { t: 0, x: 0, y: 0 };
+$("phScroll").addEventListener("pointerup", e => {
+  const r = $("phScroll").getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, now = Date.now();
+  if(now - lastTap.t < 320 && Math.abs(x - lastTap.x) < 30 && Math.abs(y - lastTap.y) < 30){ setZoom(zoom > 1 ? 1 : 2.5, x, y); lastTap.t = 0; }
+  else lastTap = { t: now, x, y };
+});
+$("zIn").addEventListener("click", () => setZoom(zoom * 1.5));
+$("zOut").addEventListener("click", () => setZoom(zoom / 1.5));
+$("rot").addEventListener("click", rotatePhoto);
+
+/* ---------- 전체화면 확인·입력 ---------- */
+
+function firstTodo(){
+  for(let i = 0; i < N; i++){ const { r, k } = cellOf(i); if(r[k] === null) return i; }
+  const bad = current.rows.findIndex(badCheck);
+  return bad >= 0 ? bad * 4 : N;
+}
+function openEntry(){
+  const m = meta();
+  $("ovTitle").textContent = [m.product, m.side, "Point " + m.point].filter(Boolean).join(" · ");
+  $("ovMeta").textContent = [md(m.date), m.color, m.sample, m.note].filter(Boolean).join(" · ") || "ΔE*ab";
+  $("entry").classList.toggle("nophoto", !current.img);
+  if(current.img) $("phImg").src = current.img; else $("phImg").removeAttribute("src");
+  cur = firstTodo(); buf = ""; confirmShown = false; $("ovConfirm").hidden = true;
+  $("entry").hidden = false; document.body.classList.add("lock");
+  $("pendingBox").hidden = true; $("draftBox").hidden = true;
+  zoom = 1; requestAnimationFrame(() => setZoom(1));
+  renderEntry();
+}
+function closeEntry(){
+  commitBuf(false); saveDraft();
+  $("entry").hidden = true; document.body.classList.remove("lock");
+  if(!hasValues()) discardDraft();
+  renderDraftBox();
+}
+
+/** 입력 중 표시: 점이 없으면 첫 자리 뒤에 점 (2 → "2.", 23 → "2.3") */
+function preview(b){
+  const neg = b[0] === "-", s = neg ? b.slice(1) : b;
+  const t = s.includes(".") ? s : (s ? s[0] + "." + s.slice(1) : "");
+  return (neg ? "−" : "") + (t || "");
+}
+function renderEntry(){
+  const g = $("grid"); g.textContent = "";
+  g.append(el("span", "gh", "각도"), ...COLS.map(k => el("span", "gh", k)));
+  current.rows.forEach((r, ri) => {
+    const lab = el("button", "lab " + r.status + (KEY.includes(r.angle) ? " key" : "") + (r.status === "fail" ? " fail" : ""));
+    lab.type = "button";
+    lab.append(el("b", "", short(r.angle)));
+    const s = el("small", "", r.status === "fail" ? "불합격" : "합격");
+    if(badCheck(r)) s.append(el("span", "chk", " ⚠"));
+    lab.append(s);
+    lab.setAttribute("aria-label", short(r.angle) + " " + (r.status === "fail" ? "불합격" : "합격") + ", 눌러서 바꾸기");
+    lab.addEventListener("click", () => { r.status = r.status === "fail" ? "pass" : "fail"; saveDraft(); renderEntry(); });
+    g.append(lab);
+    COLS.forEach((k, ci) => {
+      const i = ri * 4 + ci, v = r[k], typing = i === cur && buf;
+      const b = el("button", "cell"); b.type = "button";
+      if(i === cur) b.classList.add("cur");
+      if(typing) b.classList.add("typing");
+      else if(v === null) b.classList.add("empty");
+      else if(r.auto && r.auto[k]) b.classList.add("auto");
+      if(r.status === "fail") b.classList.add("rowfail");
+      b.textContent = typing ? preview(buf) : (v === null ? "–" : fmt(v).replace("-", "−"));
+      b.setAttribute("aria-label", short(r.angle) + " " + k + " " + (v === null ? "비어 있음" : fmt(v)));
+      b.addEventListener("click", () => { commitBuf(false); cur = i; buf = ""; negArm = false; renderEntry(); });
+      g.append(b);
+    });
+  });
+  const curEl = g.querySelector(".cell.cur"); if(curEl) curEl.scrollIntoView({ block: "nearest" });
+
+  const filled = current.rows.reduce((s, r) => s + COLS.filter(k => r[k] !== null).length, 0);
+  const autoLeft = current.rows.reduce((s, r) => s + COLS.filter(k => r.auto && r.auto[k]).length, 0);
+  const kf = current.rows.filter(r => KEY.includes(r.angle) && r.status === "fail").map(r => short(r.angle));
+  const bad = current.rows.filter(badCheck).map(r => short(r.angle));
+  const st = $("ovStat"); st.textContent = "";
+  st.append(el("span", "", "입력 " + filled + "/" + N));
+  if(kf.length) st.append(el("span", "pill fail", "핵심 불합격 " + kf.join(", ")));
+  else if(filled) st.append(el("span", "pill pass", "핵심 각도 합격"));
+  if(bad.length) st.append(el("span", "pill warn", "검산 ⚠ " + bad.join(", ")));
+  if(autoLeft) st.append(el("span", "", "점선 칸은 자동으로 읽은 값입니다. 부호까지 사진과 대조하세요."));
+  else if(cur >= N) st.append(el("span", "done", filled === N ? "모두 입력했습니다. 저장을 누르세요." : "끝까지 왔습니다. 빈 칸을 눌러 채우거나 저장하세요."));
+  else st.append(el("span", "", "2 3 3 → 2.33 · 음수는 +/−"));
+  $("saveKey").classList.toggle("ready", filled === N);
+}
+
+function setVal(i, v){ const { r, k } = cellOf(i); r[k] = v === null ? null : Math.round(v * 100) / 100; if(r.auto) delete r.auto[k]; }
+function nextEmpty(from){ for(let i = from; i < N; i++){ const { r, k } = cellOf(i); if(r[k] === null) return i; } return N; }
+function commitVal(v){ setVal(cur, v); buf = ""; cur = cur + 1 < N ? (nextEmpty(cur + 1) < N ? nextEmpty(cur + 1) : cur + 1) : N; confirmShown = false; $("ovConfirm").hidden = true; }
+function bufNumber(b){
+  const neg = b[0] === "-", s = neg ? b.slice(1) : b;
+  if(!s || s === ".") return null;
+  const n = s.includes(".") ? Number(s.replace(/\.$/, "")) : Number(s[0] + "." + (s.slice(1) || "0"));
+  return Number.isFinite(n) ? (neg ? -n : n) : null;
+}
+/* 소수 둘째 자리 고정: 숫자 세 개(2,3,3)면 2.33으로 자동 확정. 10 이상은 점을 직접 누름(1,2,.,3,4) */
+function tryCommit(){
+  const s = buf.replace(/^-/, "");
+  if(s.includes(".")){ if(s.split(".")[1].length >= 2) commitVal(bufNumber(buf)); }
+  else if(s.length === 3) commitVal(bufNumber(buf));
+}
+function commitBuf(advance = true){
+  if(!buf) return;
+  const n = bufNumber(buf);
+  if(n === null){ buf = ""; return; }
+  if(advance) commitVal(n); else { setVal(cur, n); buf = ""; }
+}
+
+/* +/− 다음에 바로 숫자를 치면 음수로 새로 입력 (값이 있던 칸도 마찬가지) */
+let negArm = false;
+function press(k){
   if(!current) return;
-  const rows = current.rows.filter(r => [r.dE,r.dL,r.da,r.db].some(v => v !== null))
-    .map(({angle,dE,dL,da,db,status}) => ({angle,dE,dL,da,db,status}));
-  if(!rows.length){ toast("저장할 값이 없습니다"); return false; }
-  const person = $("person").value.trim();
-  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), time: Date.now(),
-    person, sample: $("sampleName").value.trim(), note: $("noteInput").value.trim(), rows,
-    sync: SHEET_URL ? "pending" : "off" };
-  records.unshift(rec);
-  if(!persist(STORE, records)){ records.shift(); showErr("이 브라우저에 저장하지 못했습니다. 개인정보 보호(시크릿) 모드라면 일반 모드로 열어 주세요."); return false; }
-  persist("cm_person", person);
-  discard(); $("noteInput").value = ""; renderHist(); toast(SHEET_URL ? "저장했습니다. 시트로 보내는 중…" : "저장했습니다");
-  if(SHEET_URL) sendToSheet(rec).then(ok => toast(ok ? "시트에 입력했습니다" : "시트 전송 실패. 기록에서 다시 보낼 수 있습니다"));
-  return true;
+  const arm = negArm; negArm = false;
+  if(/^\d$/.test(k)){ if(cur >= N) return; if(!buf && arm) buf = "-"; buf += k; tryCommit(); }
+  else if(k === "."){
+    if(cur >= N) return;
+    const s = buf.replace(/^-/, "");
+    if(!s.includes(".")) buf = (buf[0] === "-" ? "-" : "") + (s || "0") + ".";
+  }
+  else if(k === "neg"){
+    if(cur >= N) return;
+    if(buf) buf = buf[0] === "-" ? buf.slice(1) : "-" + buf;
+    else { const { r, k: c } = cellOf(cur); if(r[c] !== null){ setVal(cur, -r[c]); negArm = true; } else buf = "-"; }
+  }
+  else if(k === "back"){
+    const cell = cur < N ? cellOf(cur) : null;
+    if(buf) buf = buf.slice(0, -1);
+    else if(cell && cell.r[cell.k] !== null) setVal(cur, null);
+    else if(cur > 0){ cur--; setVal(cur, null); }
+  }
+  else if(k === "prev"){ commitBuf(false); if(cur > 0) cur--; }
+  else if(k === "next"){ commitBuf(false); if(cur < N) cur++; }
+  else if(k === "save"){ commitBuf(false); saveDraft(); renderEntry(); trySave(); return; }
+  saveDraft(); renderEntry();
 }
+$("pad").addEventListener("click", e => { const b = e.target.closest("button[data-k]"); if(b) press(b.dataset.k); });
+document.addEventListener("keydown", e => {
+  if($("entry").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { Backspace: "back", Enter: "next", ArrowRight: "next", ArrowLeft: "prev", Tab: "next", "-": "neg", ".": ".", ",": "." };
+  const k = /^\d$/.test(e.key) ? e.key : map[e.key];
+  if(k){ e.preventDefault(); press(k); }
+  else if(e.key === "Escape") closeEntry();
+});
 
-/* ---------- 구글 시트 전송 ---------- */
+function trySave(){
+  const filled = current.rows.reduce((s, r) => s + COLS.filter(k => r[k] !== null).length, 0);
+  if(!filled){ toast("입력한 값이 없습니다"); return; }
+  if(!confirmShown){
+    const missing = current.rows.filter(r => COLS.some(k => r[k] === null)).map(r => short(r.angle));
+    const bad = current.rows.filter(badCheck).map(r => short(r.angle));
+    const msg = [];
+    if(missing.length) msg.push(missing.join(", ") + "에 빈 칸이 있습니다.");
+    if(bad.length) msg.push(bad.join(", ") + "는 검산이 맞지 않습니다.");
+    if(msg.length){ confirmShown = true; $("ovConfirmText").textContent = msg.join(" ") + " 그대로 저장할까요?"; $("ovConfirm").hidden = false; return; }
+  }
+  doSave();
+}
+function doSave(){
+  const e = checkMeta(); if(e){ toast(e); return; }
+  const m = meta();
+  const rows = current.rows.filter(r => COLS.some(k => r[k] !== null)).map(({ angle, dE, dL, da, db, status }) => ({ angle, dE, dL, da, db, status }));
+  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), time: Date.now(), ...m, rows, sync: SHEET_URL ? "pending" : "off" };
+  records.unshift(rec);
+  if(!persist(STORE, records)){ records.shift(); toast("저장하지 못했습니다. 시크릿 모드라면 일반 모드로 열어 주세요."); return; }
+  persist("cm_person", m.person);
+  discardDraft(); $("entry").hidden = true; document.body.classList.remove("lock");
+  const np = nextPoint(), allDone = np === point && donePoints()[np];
+  point = np; saveForm();
+  renderColorHints(); renderPoints(); renderHist();
+  toast("Point " + m.point + " 저장 · " + keyResult(rec) + (allDone ? " · 모든 포인트 완료" : " · 다음 Point " + np) + (SHEET_URL ? " · 시트로 보내는 중…" : ""));
+  if(SHEET_URL) sendToSheet(rec).then(ok => toast(ok ? "시트에 입력했습니다" : "시트 전송 실패. 기록에서 다시 보낼 수 있습니다"));
+}
+$("ovSaveAnyway").addEventListener("click", doSave);
+$("ovKeep").addEventListener("click", () => { $("ovConfirm").hidden = true; cur = firstTodo(); renderEntry(); });
+$("ovClose").addEventListener("click", closeEntry);
 
+/* ---------- 판정 ---------- */
+
+function keyResult(d){
+  const k = d.rows.filter(r => KEY.includes(r.angle));
+  if(k.length < KEY.length) return "각도 누락";
+  return k.some(r => r.status === "fail") ? "불합격" : "합격";
+}
 function checkWarn(d){
   return d.rows.filter(r => { const v = calc(r); return r.dE === null || v === null || Math.abs(v - r.dE) > 0.02; }).map(r => r.angle).join(", ");
 }
+
+/* ---------- 구글 시트 전송 ---------- */
 
 let sending = new Set();
 async function sendToSheet(rec){
@@ -475,8 +833,8 @@ async function sendToSheet(rec){
     const res = await fetch(SHEET_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ key: SHEET_KEY, id: rec.id, time: rec.time, person: rec.person, sample: rec.sample, note: rec.note,
-        keyResult: keyResult(rec), checkWarn: checkWarn(rec), rows: rec.rows })
+      body: JSON.stringify({ key: SHEET_KEY, id: rec.id, time: rec.time, date: rec.date, product: rec.product, side: rec.side, point: rec.point, color: rec.color, person: rec.person,
+        sample: rec.sample, note: rec.note, keyResult: keyResult(rec), checkWarn: checkWarn(rec), rows: rec.rows })
     });
     const j = await res.json();
     ok = !!(j && j.ok);
@@ -487,130 +845,149 @@ async function sendToSheet(rec){
   renderHist();
   return ok;
 }
-
 async function resendAll(){
   const list = records.filter(r => r.sync === "failed" || r.sync === "pending");
   let n = 0; for(const r of list.slice().reverse()) if(await sendToSheet(r)) n++;
   if(list.length) toast(n === list.length ? "시트에 " + n + "건 입력했습니다" : (list.length - n) + "건은 아직 보내지 못했습니다");
 }
-function discard(){ if(current && current.img) URL.revokeObjectURL(current.img); current = null; $("reviewCard").hidden = true; }
 
 /* ---------- 기록 ---------- */
+
+function renderFilter(){
+  const sel = $("filter"), keep = sel.value;
+  const names = [...new Set([...PRODUCTS.map(p => p.name), ...records.map(r => r.product).filter(Boolean)])];
+  sel.textContent = ""; sel.append(Object.assign(el("option", "", "전체 품명"), { value: "" }));
+  names.forEach(n => sel.append(Object.assign(el("option", "", n), { value: n })));
+  sel.value = names.includes(keep) ? keep : "";
+}
+function shown(){ const f = $("filter").value; return f ? records.filter(r => r.product === f) : records; }
 
 function renderHist(){
   const h = $("hist"); h.textContent = "";
   $("histBtns").hidden = !records.length;
-  if(!records.length){ const p = document.createElement("p"); p.className = "empty"; p.textContent = "아직 저장된 측정이 없습니다. 위에서 색차계 화면을 찍으면 여기에 쌓이고, 엑셀로 내려받거나 공유할 수 있습니다."; h.append(p); return; }
-  records.forEach(d => {
-    const el = document.createElement("div"); el.className = "rec";
-    const top = document.createElement("div"); top.className = "rec-top";
-    const nm = document.createElement("span"); nm.className = "rec-name"; nm.textContent = d.sample || "(시료명 없음)";
-    const tm = document.createElement("span"); tm.className = "rec-time"; tm.textContent = new Date(d.time).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
-    top.append(nm, tm); el.append(top);
-    const chips = document.createElement("div"); chips.className = "chips";
+  renderFilter();
+  const list = shown();
+  if(!list.length){ h.append(el("p", "empty", records.length ? "이 품명의 기록이 없습니다." : "아직 저장된 측정이 없습니다. 저장한 측정은 여기에 쌓이고, 엑셀로 내려받거나 공유할 수 있습니다.")); return; }
+  list.forEach(d => {
+    const kr = keyResult(d), box = el("div", "rec");
+    const top = el("div", "rec-top");
+    const nm = el("span", "rec-name", [d.product, d.side, d.point ? "P" + d.point : ""].filter(Boolean).join(" ") || "(품명 없음)");
+    nm.append(el("small", "", [md(d.date || ""), d.color, d.sample].filter(Boolean).join(" ")));
+    top.append(nm, el("span", "pill " + (kr === "불합격" ? "fail" : kr === "합격" ? "pass" : "warn"), kr));
+    box.append(top);
+    const chips = el("div", "kchips");
     KEY.forEach(k => {
-      const r = d.rows.find(x => x.angle === k); const c = document.createElement("div");
-      c.className = "chip " + (r ? r.status : "none");
-      const s = document.createElement("small"); s.textContent = k.replace("r45as","") + "° dE";
-      const b = document.createElement("strong"); b.textContent = r ? fmt(r.dE) : "–";
-      c.append(s, b); chips.append(c);
+      const r = d.rows.find(x => x.angle === k), c = el("div", "kchip " + (r ? r.status : ""));
+      c.append(el("small", "", short(k) + " dE"), el("strong", "", r ? fmt(r.dE) : "–"));
+      chips.append(c);
     });
-    el.append(chips);
-    const extra = [d.person, d.note].filter(Boolean).join(" · ");
-    if(extra){ const n = document.createElement("div"); n.className = "rec-note"; n.textContent = extra; el.append(n); }
-    const act = document.createElement("div"); act.className = "rec-act";
+    box.append(chips);
+    const extra = [d.note, d.person].filter(Boolean).join(" · ");
+    if(extra) box.append(el("div", "rec-note", extra));
+    const act = el("div", "rec-act");
     if(SHEET_URL && d.sync && d.sync !== "off"){
-      const sy = document.createElement("span"); sy.className = "sync " + d.sync;
-      sy.textContent = { sent: "시트 입력됨", sending: "시트로 보내는 중…", pending: "시트 전송 대기", failed: "시트 전송 실패" }[d.sync] || "";
-      act.append(sy);
+      act.append(el("span", "sync " + d.sync, { sent: "시트 입력됨", sending: "시트로 보내는 중…", pending: "시트 전송 대기", failed: "시트 전송 실패" }[d.sync] || ""));
       if(d.sync === "failed" || d.sync === "pending"){
-        const rs = document.createElement("button"); rs.className = "btn small"; rs.type = "button"; rs.textContent = "다시 보내기";
+        const rs = el("button", "btn small", "다시 보내기"); rs.type = "button";
         rs.addEventListener("click", () => sendToSheet(d).then(ok => toast(ok ? "시트에 입력했습니다" : "보내지 못했습니다. 인터넷 연결을 확인해 주세요")));
         act.append(rs);
       }
     }
-    const del = document.createElement("button"); del.className = "btn small"; del.type = "button"; del.textContent = "삭제";
+    const del = el("button", "btn small", "삭제"); del.type = "button";
     del.addEventListener("click", () => {
       act.textContent = "";
-      const q = document.createElement("span"); q.textContent = "이 기록을 지울까요?";
-      const no = document.createElement("button"); no.className = "btn small"; no.type = "button"; no.textContent = "취소"; no.addEventListener("click", renderHist);
-      const yes = document.createElement("button"); yes.className = "btn small danger"; yes.type = "button"; yes.textContent = "삭제";
+      act.append(el("span", "", d.sync === "sent" ? "휴대폰 기록만 지웁니다 (시트는 그대로)." : "이 기록을 지울까요?"));
+      const no = el("button", "btn small", "취소"); no.type = "button"; no.addEventListener("click", renderHist);
+      const yes = el("button", "btn small danger", "삭제"); yes.type = "button";
       yes.addEventListener("click", () => { records = records.filter(x => x.id !== d.id); persist(STORE, records); renderHist(); toast("삭제했습니다"); });
-      act.append(q, no, yes);
+      act.append(no, yes);
     });
-    act.append(del); el.append(act); h.append(el);
+    act.append(del); box.append(act); h.append(box);
   });
 }
 
-function keyResult(d){
-  const k = d.rows.filter(r => KEY.includes(r.angle));
-  if(k.length < KEY.length) return "각도 누락";
-  return k.some(r => r.status === "fail") ? "불합격" : "합격";
-}
+/* ---------- 엑셀 ---------- */
 
-function buildXlsx(){
-  const head = ["일시","측정자","시료","메모","핵심각도판정","검산경고"];
+function buildXlsx(list){
+  const head = ["측정일자","품명","위치","포인트","칼라","시료","비고","측정자","핵심각도판정","검산경고"];
   ORDER.forEach(a => head.push(a+" dE", a+" dL", a+" da", a+" db", a+" 판정"));
+  head.push("저장시각");
   const aoa = [head];
-  records.slice().reverse().forEach(d => {
-    const row = [new Date(d.time), d.person, d.sample, d.note, keyResult(d), checkWarn(d)];
+  list.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.product || "").localeCompare(b.product || "") || (a.side || "").localeCompare(b.side || "") || (a.point || 0) - (b.point || 0) || a.time - b.time)).forEach(d => {
+    const row = [d.date || "", d.product || "", d.side || "", d.point ? "Point " + d.point : "", d.color || "", d.sample || "", d.note || "", d.person || "", keyResult(d), checkWarn(d)];
     ORDER.forEach(a => { const r = d.rows.find(x => x.angle === a); row.push(r ? r.dE : null, r ? r.dL : null, r ? r.da : null, r ? r.db : null, r ? (r.status === "fail" ? "불합격" : "합격") : null); });
+    row.push(new Date(d.time));
     aoa.push(row);
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true, dateNF: "yyyy-mm-dd hh:mm" });
-  ws["!cols"] = head.map((h, i) => ({ wch: i === 0 ? 17 : i < 6 ? 12 : 9 }));
-  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  Object.keys(ws).forEach(k => { if(k[0] !== "!" && ws[k].t === "n") ws[k].z = "0.00"; });
+  ws["!cols"] = head.map((h, i) => ({ wch: i < 10 ? 11 : i === head.length - 1 ? 17 : 8 }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "측정기록");
-  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  const name = "색차측정_" + new Date().toISOString().slice(0,10) + ".xlsx";
-  return new File([buf], name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return new File([out], "색차측정_" + today() + ".xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
-
 function downloadXlsx(){
   if(typeof XLSX === "undefined"){ toast("엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
-  const f = buildXlsx(); const url = URL.createObjectURL(f);
+  const list = shown(); if(!list.length) return;
+  const f = buildXlsx(list), url = URL.createObjectURL(f);
   const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-
 async function shareXlsx(){
   if(typeof XLSX === "undefined"){ toast("엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
-  const f = buildXlsx();
+  const list = shown(); if(!list.length) return;
+  const f = buildXlsx(list);
   if(navigator.canShare && navigator.canShare({ files: [f] })){
     try{ await navigator.share({ files: [f], title: "색차 측정 기록" }); }
     catch(e){ if(e && e.name !== "AbortError") downloadXlsx(); }
-  } else {
-    downloadXlsx(); toast("이 기기는 바로 공유가 안 돼서 파일로 내려받았습니다");
-  }
+  } else { downloadXlsx(); toast("이 기기는 바로 공유가 안 돼서 파일로 내려받았습니다"); }
 }
 
 /* ---------- 시작 ---------- */
 
-/* 저장 안 한 측정이 있으면 새 사진·직접 입력 전에 경고 */
-let pendingNext = null;
-function startManual(){ showErr(""); setCurrent({ rows: ORDER.map(a => ({ angle: a, dE: null, dL: null, da: null, db: null, status: "pass" })), img: null }); }
-function askPending(next){ pendingNext = next; $("pendingBox").hidden = false; $("pendSave").focus(); }
-function closePending(){ $("pendingBox").hidden = true; const n = pendingNext; pendingNext = null; return n; }
-function runNext(n){ if(n === "photo") $("photo").click(); else if(n === "manual") startManual(); }
-
-$("photo").addEventListener("click", e => { if(current){ e.preventDefault(); askPending("photo"); } });
-$("photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) readPhoto(f); });
-$("manualBtn").addEventListener("click", () => { if(current) askPending("manual"); else startManual(); });
-$("pendSave").addEventListener("click", () => { const n = closePending(); if(save()) runNext(n); else $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }); });
-$("pendDrop").addEventListener("click", () => { const n = closePending(); discard(); runNext(n); });
-$("pendCancel").addEventListener("click", () => { closePending(); $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }); });
-window.addEventListener("beforeunload", e => { if(current){ e.preventDefault(); e.returnValue = ""; } });
-$("saveBtn").addEventListener("click", save);
-$("discardBtn").addEventListener("click", discard);
+function begin(kind){
+  if(kind === "photo") $("photo").click();
+  else if(kind === "album") $("album").click();
+  else { showErr(""); newDraft(emptyRows(), null); openEntry(); }
+}
+function guard(e, kind){
+  const m = checkMeta();
+  if(m){ e && e.preventDefault(); showErr(m); return false; }
+  showErr("");
+  if(hasValues()){ e && e.preventDefault(); pendingNext = kind; $("pendingBox").hidden = false; $("draftBox").hidden = true; $("pendResume").focus(); return false; }
+  return true;
+}
+$("photo").addEventListener("click", e => guard(e, "photo"));
+$("album").addEventListener("click", e => guard(e, "album"));
+$("photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) onPhoto(f); });
+$("album").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) onPhoto(f); });
+$("manualBtn").addEventListener("click", () => { if(guard(null, "manual")) begin("manual"); });
+$("pendResume").addEventListener("click", () => { $("pendingBox").hidden = true; openEntry(); });
+$("pendDrop").addEventListener("click", () => { $("pendingBox").hidden = true; const k = pendingNext; pendingNext = null; discardDraft(); begin(k); });
+$("pendCancel").addEventListener("click", () => { $("pendingBox").hidden = true; renderDraftBox(); });
+$("draftResume").addEventListener("click", openEntry);
+$("draftDrop").addEventListener("click", () => { discardDraft(); toast("작성 중이던 값을 버렸습니다"); });
+["color","sampleName","note","person"].forEach(id => $(id).addEventListener("input", saveForm));
+$("color").addEventListener("input", () => { markColor(); renderPoints(); });
+$("product").addEventListener("change", onProductChange);
+$("date").addEventListener("change", renderPoints);
+document.querySelectorAll('input[name=side]').forEach(r => r.addEventListener("change", () => { saveForm(); renderPoints(); }));
+document.addEventListener("click", e => { if(e.target.closest("#colorChips .cc")) renderPoints(); });
+$("filter").addEventListener("change", renderHist);
 $("xlsxBtn").addEventListener("click", downloadXlsx);
 $("shareBtn").addEventListener("click", shareXlsx);
+window.addEventListener("beforeunload", e => { if(hasValues()){ e.preventDefault(); e.returnValue = ""; } });
 
-records = load(STORE, []);
-if(!Array.isArray(records)) records = [];
-$("person").value = load("cm_person", "") || "";
-records.forEach(r => { if(r.sync === "sending") r.sync = "pending"; if(SHEET_URL && !r.sync) r.sync = "pending"; });
-renderHist();
-// 지난번에 못 보낸 기록은 열 때와 인터넷이 다시 연결될 때 자동으로 다시 보냅니다
+records = load(STORE, []); if(!Array.isArray(records)) records = [];
+renderProducts(); restoreForm(); formReady = true; onProductChange();
+const d0 = load(DSTORE, null);
+if(d0 && Array.isArray(d0.rows) && d0.rows.length === ORDER.length){
+  current = { rows: d0.rows.map(r => ({ ...r, auto: r.auto || {} })), img: null };
+  if(!hasValues()) current = null;
+}
+records.forEach(r => { if(r.sync === "sending") r.sync = "pending"; if(SHEET_URL && (!r.sync || r.sync === "off")) r.sync = "pending"; });
+renderColorHints(); renderHist(); renderDraftBox();
+// 지난번에 못 보낸 기록은 앱을 열 때와 인터넷이 다시 연결될 때 자동으로 다시 보냅니다
 if(SHEET_URL){ resendAll(); window.addEventListener("online", resendAll); }
 </script>
 </body>
