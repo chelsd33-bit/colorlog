@@ -194,7 +194,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
       <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍고 입력">
     </label>
     <div class="row2">
-      <span class="linkbtn">앨범에서 사진 고르기<input type="file" id="album" accept="image/*" aria-label="앨범에서 사진 고르기"></span>
+      <span class="linkbtn">앨범에서 고르기 (여러 장 가능)<input type="file" id="album" accept="image/*" multiple aria-label="앨범에서 사진 고르기, 여러 장 가능"></span>
       <button class="linkbtn" id="manualBtn" type="button">사진 없이 입력</button>
     </div>
     <p class="hint">표가 화면에 꽉 차게, 정면에서 반사 없이 찍으면 잘 읽힙니다.</p>
@@ -233,6 +233,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 <div class="ov" id="entry" role="dialog" aria-modal="true" aria-labelledby="ovTitle" hidden>
   <div class="ov-top">
     <div class="ov-title"><strong id="ovTitle"></strong><span id="ovMeta"></span></div>
+    <button class="btn small" id="ovSkip" type="button" hidden>이 사진 건너뛰기</button>
     <button class="btn small" id="ovClose" type="button">닫기</button>
   </div>
   <div class="ph">
@@ -460,7 +461,7 @@ async function ocr(file){
   const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, c.width, c.height);
   const cl = cleanBin(binarize(c));
   await getWorker();
-  $("busyText").textContent = "숫자를 읽는 중…";
+  $("busyText").textContent = (typeof batch !== "undefined" && batch ? batchLabel() + " · " : "") + "숫자를 읽는 중…";
   const minW = cl.width*0.05, found = [];
   for(const band of segment(cl)){
     const segs = band.segs.filter(s => s[1]-s[0] >= minW);
@@ -589,9 +590,38 @@ function renderDraftBox(){
   if(show){ const n = current.rows.reduce((s, r) => s + COLS.filter(k => r[k] !== null).length, 0); $("draftText").textContent = n + "/" + N + "칸 입력"; }
 }
 
+/* ---------- 앨범에서 여러 장: 찍은 시간 순서대로 지금 고른 포인트부터 하나씩 ---------- */
+
+let batch = null;   // { items: [{ file, point }], i }
+function onAlbum(fileList){
+  const files = Array.from(fileList || []).sort((a, b) => a.lastModified - b.lastModified);
+  $("album").value = "";
+  if(!files.length) return;
+  if(files.length === 1){ batch = null; onPhoto(files[0]); return; }
+  const p = prod(), room = p.points - point + 1;
+  const items = files.slice(0, room).map((file, j) => ({ file, point: point + j }));
+  batch = { items, i: 0 };
+  if(files.length > room) toast("Point " + point + "~" + p.points + "에 " + room + "장만 넣습니다. 나머지 " + (files.length - room) + "장은 건너뜁니다");
+  runBatch();
+}
+function runBatch(){
+  if(!batch) return;
+  if(batch.i >= batch.items.length){ batch = null; return; }
+  point = batch.items[batch.i].point; saveForm(); renderPoints();
+  onPhoto(batch.items[batch.i].file);
+}
+function batchLabel(){ return batch ? "사진 " + (batch.i + 1) + "/" + batch.items.length : ""; }
+function skipBatchPhoto(){
+  if(!batch) return;
+  discardDraft(); $("entry").hidden = true; document.body.classList.remove("lock");
+  toast("Point " + point + " 사진을 건너뛰었습니다");
+  batch.i++;
+  if(batch.i < batch.items.length) runBatch(); else { batch = null; renderPoints(); }
+}
+
 async function onPhoto(file){
   showErr(""); $("busy").hidden = false; $("shootBtn").classList.add("off");
-  $("busyText").textContent = "사진을 읽는 중…";
+  $("busyText").textContent = batch ? batchLabel() + " 읽는 중… (Point " + point + ")" : "사진을 읽는 중…";
   let rows = emptyRows(), img = null, read = 0;
   try{
     if(typeof Tesseract === "undefined") throw new Error("noocr");
@@ -654,7 +684,8 @@ function firstTodo(){
 }
 function openEntry(){
   const m = meta();
-  $("ovTitle").textContent = [m.product, m.side, "Point " + m.point].filter(Boolean).join(" · ");
+  $("ovTitle").textContent = [m.product, m.side, "Point " + m.point, batchLabel()].filter(Boolean).join(" · ");
+  $("ovSkip").hidden = !batch;
   $("ovMeta").textContent = [md(m.date), m.color, m.sample, m.note].filter(Boolean).join(" · ") || "ΔE*ab";
   $("entry").classList.toggle("nophoto", !current.img);
   if(current.img) $("phImg").src = current.img; else $("phImg").removeAttribute("src");
@@ -665,6 +696,11 @@ function openEntry(){
   renderEntry();
 }
 function closeEntry(){
+  if(batch){
+    const left = batch.items.length - batch.i - 1;
+    if(left > 0) toast("남은 사진 " + left + "장은 건너뛰었습니다. 앨범에서 다시 고를 수 있습니다");
+    batch = null;
+  }
   commitBuf(false); saveDraft();
   $("entry").hidden = true; document.body.classList.remove("lock");
   if(!hasValues()) discardDraft();
@@ -801,11 +837,19 @@ function doSave(){
   if(!persist(STORE, records)){ records.shift(); toast("저장하지 못했습니다. 시크릿 모드라면 일반 모드로 열어 주세요."); return; }
   persist("cm_person", m.person);
   discardDraft(); $("entry").hidden = true; document.body.classList.remove("lock");
+  if(SHEET_URL) sendToSheet(rec).then(ok => { if(!ok) toast("시트 전송 실패. 기록에서 다시 보낼 수 있습니다"); });
+  if(batch && batch.i + 1 < batch.items.length){
+    batch.i++;
+    renderColorHints(); renderHist();
+    toast("Point " + m.point + " 저장 · " + keyResult(rec) + " · 다음 사진 (Point " + batch.items[batch.i].point + ")");
+    runBatch();
+    return;
+  }
+  batch = null;
   const np = nextPoint(), allDone = np === point && donePoints()[np];
   point = np; saveForm();
   renderColorHints(); renderPoints(); renderHist();
   toast("Point " + m.point + " 저장 · " + keyResult(rec) + (allDone ? " · 모든 포인트 완료" : " · 다음 Point " + np) + (SHEET_URL ? " · 시트로 보내는 중…" : ""));
-  if(SHEET_URL) sendToSheet(rec).then(ok => toast(ok ? "시트에 입력했습니다" : "시트 전송 실패. 기록에서 다시 보낼 수 있습니다"));
 }
 $("ovSaveAnyway").addEventListener("click", doSave);
 $("ovKeep").addEventListener("click", () => { $("ovConfirm").hidden = true; cur = firstTodo(); renderEntry(); });
@@ -960,7 +1004,8 @@ function guard(e, kind){
 $("photo").addEventListener("click", e => guard(e, "photo"));
 $("album").addEventListener("click", e => guard(e, "album"));
 $("photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) onPhoto(f); });
-$("album").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) onPhoto(f); });
+$("album").addEventListener("change", e => onAlbum(e.target.files));
+$("ovSkip").addEventListener("click", skipBatchPhoto);
 $("manualBtn").addEventListener("click", () => { if(guard(null, "manual")) begin("manual"); });
 $("pendResume").addEventListener("click", () => { $("pendingBox").hidden = true; openEntry(); });
 $("pendDrop").addEventListener("click", () => { $("pendingBox").hidden = true; const k = pendingNext; pendingNext = null; discardDraft(); begin(k); });
