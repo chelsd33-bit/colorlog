@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -398,7 +398,9 @@ function cleanBin(bin){
 function segment(cl){
   const W = cl.width, H = cl.height, d = cl.getContext("2d").getImageData(0, 0, W, H).data;
   const ink = (x, y) => d[(y*W+x)*4] === 0;
-  const rowSum = new Int32Array(H); for(let y=0; y<H; y++){ let s=0; for(let x=0; x<W; x++) if(ink(x,y)) s++; rowSum[y]=s; }
+  // 줄 나누기는 값 칸 쪽(오른쪽 70%)만 봄: 왼쪽 각도 라벨 칸의 얼룩이 위아래 줄을 이어 붙이는 것을 막음
+  const xL = Math.round(W*0.3);
+  const rowSum = new Int32Array(H); for(let y=0; y<H; y++){ let s=0; for(let x=xL; x<W; x++) if(ink(x,y)) s++; rowSum[y]=s; }
   const bands = []; let s = -1;
   for(let y=0; y<=H; y++){ const on = y<H && rowSum[y] > 2; if(on && s<0) s=y; if(!on && s>=0){ if(y-s >= 15) bands.push([s,y]); s=-1; } }
   return bands.map(([y0, y1]) => {
@@ -508,7 +510,7 @@ function findTableBox(img){
 function looksAbsolute(rows){
   const full = rows.filter(r => [r.dE, r.dL, r.da, r.db].every(v => v !== null && v !== undefined));
   const off = full.filter(r => Math.abs(Math.sqrt(r.dL**2 + r.da**2 + r.db**2) - r.dE) > 0.3);
-  return full.length >= 3 && off.length >= Math.ceil(full.length * 0.6);
+  return (rows.wideRows || 0) >= 3 || (full.length >= 3 && off.length >= Math.ceil(full.length * 0.6));
 }
 
 async function ocr(file){
@@ -537,9 +539,11 @@ async function readTable(c){
   await getWorker();
   $("busyText").textContent = (typeof batch !== "undefined" && batch ? batchLabel() + " · " : "") + "숫자를 읽는 중…";
   const minW = cl.width*0.05, found = [];
+  let wideRows = 0;   // 값 칸이 5개 이상인 줄 = # 화면(L* a* b* C* h)일 가능성
   for(const band of segment(cl)){
     const segs = band.segs.filter(s => s[1]-s[0] >= minW);
     if(segs.length < 5) continue;
+    if(segs.length >= 6) wideRows++;
     const cells = segs.slice(-4), labelSeg = segs[segs.length-5];
     const vals = []; for(const sg of cells) vals.push(await readValue(cl, sg, band));
     if(vals.filter(v => v !== null).length < 3) continue;
@@ -551,12 +555,25 @@ async function readTable(c){
     found.push({ angle, y: band.y0, dE: vals[0], dL: vals[1], da: vals[2], db: vals[3],
       status: redRatio(ctx, box) > 0.25 ? "fail" : "pass" });
   }
-  // 6행이 다 읽혔으면 화면 순서대로 각도를 붙이고, 아니면 읽힌 라벨을 씁니다
+  // 각도 정하기: 6줄이 다 읽혔으면 화면 순서대로.
+  // 빠진 줄이 있으면 줄 간격으로 각 줄의 자리를 계산하고, 읽힌 라벨과 가장 많이 맞는 위치에 맞춤
   if(found.length === ORDER.length) found.forEach((r, i) => { r.angle = ORDER[i]; });
-  const used = new Set(found.map(r => r.angle).filter(Boolean));
-  const left = ORDER.filter(a => !used.has(a));
-  found.forEach(r => { if(!r.angle) r.angle = left.shift() || "?"; });
-  return found.map(({ y, ...r }) => r);
+  else if(found.length){
+    const ys = found.map(r => r.y), gaps = ys.slice(1).map((y, i) => y - ys[i]).filter(g => g > 0);
+    const pitch = gaps.length ? Math.min(...gaps) : 1;
+    const idx = ys.map(y => Math.round((y - ys[0]) / pitch));
+    const span = idx[idx.length - 1];
+    let bestO = 0, bestS = -1;
+    for(let o = 0; o + span < ORDER.length; o++){
+      const s = found.reduce((n, r, i) => n + (r.angle === ORDER[idx[i] + o] ? 1 : 0), 0);
+      if(s > bestS){ bestS = s; bestO = o; }
+    }
+    if(span < ORDER.length) found.forEach((r, i) => { r.angle = ORDER[idx[i] + bestO]; });
+    else { const used = new Set(found.map(r => r.angle).filter(Boolean)), left = ORDER.filter(a => !used.has(a)); found.forEach(r => { if(!r.angle) r.angle = left.shift() || "?"; }); }
+  }
+  const out = found.map(({ y, ...r }) => r);
+  out.wideRows = wideRows;
+  return out;
 }
 
 
