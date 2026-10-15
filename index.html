@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -155,6 +155,11 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 @media (max-height:680px){.pad button{height:44px}.grid{max-height:40vh}.cell,.lab{min-height:38px}}
 
 .toast{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px)}
+.auto{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:14px;cursor:pointer}
+.auto input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
+.auto small{display:block;font-size:12px;color:var(--muted)}
+.snack{position:fixed;z-index:21;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 8px 8px 16px;border-radius:8px;font-size:14px;width:max-content;max-width:calc(100% - 32px);display:flex;gap:12px;align-items:center}
+.snack button{font:inherit;font-weight:700;background:none;border:0;color:var(--accent-soft);padding:8px 10px;cursor:pointer;flex:none}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -192,9 +197,10 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 
     <label class="shoot" id="shootBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-      <span>색차계 화면 찍고 입력</span>
-      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍고 입력">
+      <span>색차계 화면 찍기</span>
+      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍기">
     </label>
+    <label class="auto"><input type="checkbox" id="autoSave"> 찍으면 바로 저장 <small>(24칸이 다 읽히고 검산이 모두 맞을 때만. 아니면 확인 화면이 열립니다)</small></label>
     <div class="row2">
       <span class="linkbtn">앨범에서 고르기 (여러 장 가능)<input type="file" id="album" accept="image/*" multiple aria-label="앨범에서 사진 고르기, 여러 장 가능"></span>
       <button class="linkbtn" id="manualBtn" type="button">사진 없이 입력</button>
@@ -265,6 +271,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="snack" id="snack" role="status" hidden><span id="snackText"></span><button type="button" id="snackUndo">되돌리기</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -725,7 +732,14 @@ async function onPhoto(file){
     $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = ""; $("album").value = "";
   }
   if(!img){ showErr("사진을 열지 못했습니다. 다시 찍어 주세요."); return; }
-  newDraft(rows, img); current.absolute = absolute; openEntry();
+  if(autoOn() && read === N && !absolute && !rows.some(badCheck) && !checkMeta()){
+    const p = point, snap = JSON.parse(JSON.stringify(rows));
+    newDraft(rows, img); current.img = null;          // 되돌리기에 쓰려고 사진은 따로 보관
+    const res = doSave({ auto: true });
+    if(res){ setLastAuto({ id: res.rec.id, rows: snap, img, point: p }); showSnack(res.msg); return; }
+    current.img = img;                                 // 저장 실패: 확인 화면으로
+  } else newDraft(rows, img);
+  current.absolute = absolute; openEntry();
   toast(absolute ? "색차계가 # (절대값) 화면 같습니다. 색차계에서 Δ를 누르고 다시 찍어 주세요"
     : read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요"
     : "숫자를 읽지 못했습니다. 사진을 표가 꽉 차게 확대하고 '이 부분 읽기'를 눌러 보세요");
@@ -958,30 +972,59 @@ function trySave(){
   }
   doSave();
 }
-function doSave(){
-  const e = checkMeta(); if(e){ toast(e); return; }
+function doSave(opts){
+  const auto = !!(opts && opts.auto && opts.auto === true);
+  const say = msg => { if(auto) return { rec: records[0], msg }; toast(msg); return { rec: records[0], msg }; };
+  const e = checkMeta(); if(e){ toast(e); return null; }
   const m = meta();
   const rows = current.rows.filter(r => COLS.some(k => r[k] !== null)).map(({ angle, dE, dL, da, db, status }) => ({ angle, dE, dL, da, db, status }));
   const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), time: Date.now(), ...m, rows, sync: SHEET_URL ? "pending" : "off" };
   records.unshift(rec);
-  if(!persist(STORE, records)){ records.shift(); toast("저장하지 못했습니다. 시크릿 모드라면 일반 모드로 열어 주세요."); return; }
+  if(!persist(STORE, records)){ records.shift(); toast("저장하지 못했습니다. 시크릿 모드라면 일반 모드로 열어 주세요."); return null; }
   persist("cm_person", m.person);
   discardDraft(); $("entry").hidden = true; document.body.classList.remove("lock");
   if(SHEET_URL) sendToSheet(rec).then(ok => { if(!ok) toast("시트 전송 실패. 기록에서 다시 보낼 수 있습니다"); });
   if(batch && batch.i + 1 < batch.items.length){
     batch.i++;
     renderColorHints(); renderHist();
-    toast("Point " + m.point + " 저장 · " + keyResult(rec) + " · 다음 사진 (Point " + batch.items[batch.i].point + ")");
+    const r = say("Point " + m.point + (auto ? " 자동 저장 · " : " 저장 · ") + keyResult(rec) + " · 다음 사진 (Point " + batch.items[batch.i].point + ")");
     runBatch();
-    return;
+    return r;
   }
   batch = null;
   const np = nextPoint(), allDone = np === point && donePoints()[np];
   point = np; saveForm();
   renderColorHints(); renderPoints(); renderHist();
-  toast("Point " + m.point + " 저장 · " + keyResult(rec) + (allDone ? " · 모든 포인트 완료" : " · 다음 Point " + np) + (SHEET_URL ? " · 시트로 보내는 중…" : ""));
+  return say("Point " + m.point + (auto ? " 자동 저장 · " : " 저장 · ") + keyResult(rec) + (allDone ? " · 모든 포인트 완료" : " · 다음 Point " + np));
 }
-$("ovSaveAnyway").addEventListener("click", doSave);
+
+/* ---------- 자동 저장 · 되돌리기 ---------- */
+
+let lastAuto = null;
+function autoOn(){ return $("autoSave").checked; }
+function setLastAuto(a){
+  if(lastAuto && lastAuto.img && (!current || current.img !== lastAuto.img)) URL.revokeObjectURL(lastAuto.img);
+  lastAuto = a;
+}
+function showSnack(msg){
+  $("snackText").textContent = msg; $("snack").hidden = false; $("toast").hidden = true;
+  clearTimeout(showSnack.t); showSnack.t = setTimeout(() => $("snack").hidden = true, 7000);
+}
+function undoAuto(){
+  $("snack").hidden = true;
+  if(!lastAuto) return;
+  const a = lastAuto; lastAuto = null;
+  const rec = records.find(r => r.id === a.id);
+  records = records.filter(r => r.id !== a.id); persist(STORE, records);
+  if(batch){ const left = batch.items.length - batch.i; if(left > 0) toast("남은 사진 " + left + "장은 건너뛰었습니다"); batch = null; }
+  if(!$("entry").hidden){ $("entry").hidden = true; document.body.classList.remove("lock"); }
+  point = a.point; saveForm(); renderPoints(); renderHist(); renderColorHints();
+  newDraft(a.rows, a.img); openEntry();
+  toast(rec && rec.sync === "sent" ? "저장을 취소했습니다. 시트 값은 다시 저장하면 바뀝니다" : "저장을 취소했습니다. 확인하고 저장해 주세요");
+}
+$("ovSaveAnyway").addEventListener("click", () => doSave());
+$("snackUndo").addEventListener("click", undoAuto);
+$("autoSave").addEventListener("change", () => persist("cm_autosave", $("autoSave").checked));
 $("ovKeep").addEventListener("click", () => { $("ovConfirm").hidden = true; cur = firstTodo(); renderEntry(); });
 $("ovClose").addEventListener("click", closeEntry);
 
@@ -1154,6 +1197,7 @@ $("shareBtn").addEventListener("click", shareXlsx);
 window.addEventListener("beforeunload", e => { if(hasValues()){ e.preventDefault(); e.returnValue = ""; } });
 
 records = load(STORE, []); if(!Array.isArray(records)) records = [];
+$("autoSave").checked = load("cm_autosave", true) !== false;
 renderProducts(); restoreForm(); formReady = true; onProductChange();
 const d0 = load(DSTORE, null);
 if(d0 && Array.isArray(d0.rows) && d0.rows.length === ORDER.length){
@@ -1167,3 +1211,4 @@ if(SHEET_URL){ resendAll(); window.addEventListener("online", resendAll); }
 </script>
 </body>
 </html>
+
