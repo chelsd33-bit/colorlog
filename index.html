@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -122,6 +122,8 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .ph-tools{position:absolute;right:8px;bottom:8px;display:flex;gap:6px}
 .ph-tools button{width:40px;height:40px;border-radius:8px;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:20px;cursor:pointer;display:grid;place-items:center}
 .ph-tools button svg{width:20px;height:20px}
+.ph-tools button.wide{width:auto;padding:0 12px;font:inherit;font-size:14px;font-weight:600;background:rgba(31,95,116,.9)}
+.ph-tools button:disabled{opacity:.6}
 .ph-zoom{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;border-radius:6px;padding:4px 8px;font-family:var(--mono)}
 .ov.nophoto .ph{display:none}
 .ov.nophoto .grid{flex:1 1 auto;max-height:none;align-content:start}
@@ -240,6 +242,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
     <div class="ph-scroll" id="phScroll"><img id="phImg" alt="색차계 화면 사진" draggable="false"></div>
     <span class="ph-zoom" id="phZoom">1×</span>
     <div class="ph-tools">
+      <button type="button" id="readHere" class="wide">이 부분 읽기</button>
       <button type="button" id="zOut" aria-label="축소">−</button>
       <button type="button" id="zIn" aria-label="확대">+</button>
       <button type="button" id="rot" aria-label="사진 돌리기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
@@ -453,12 +456,83 @@ async function readValue(cl, seg, band){
   return Number(dg.slice(0,-2) + "." + dg.slice(-2)) * (neg ? -1 : 1);
 }
 
+/** 원본 사진의 한 영역을 잘라 긴 변 target px 캔버스로 (작게 찍힌 화면은 키워서) */
+function cropCanvas(img, sx, sy, sw, sh, target){
+  const scale = Math.min(3, target / Math.max(sw, sh));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(sw*scale)); c.height = Math.max(1, Math.round(sh*scale));
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high";
+  g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c;
+}
+
+/** 사진 안에서 표(흰 칸·빨간 칸이 모인 곳)를 찾아 원본 좌표 상자로. 못 찾으면 null */
+function findTableBox(img){
+  const W0 = img.naturalWidth, H0 = img.naturalHeight, k = 600 / Math.max(W0, H0);
+  const c = cropCanvas(img, 0, 0, W0, H0, 600), W = c.width, H = c.height;
+  const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+  const G = 6, gw = Math.ceil(W / G), gh = Math.ceil(H / G), on = new Uint8Array(gw*gh);
+  for(let gy = 0; gy < gh; gy++) for(let gx = 0; gx < gw; gx++){
+    let n = 0, hit = 0;
+    for(let y = gy*G; y < Math.min(H, gy*G+G); y++) for(let x = gx*G; x < Math.min(W, gx*G+G); x++){
+      const p = (y*W+x)*4, r = d[p], g = d[p+1], b = d[p+2], mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+      const white = mn > 150 && mx - mn < 45, red = r > 140 && r - Math.max(g,b) > 60;
+      n++; if(white || red) hit++;
+    }
+    on[gy*gw+gx] = hit / n > 0.4 ? 1 : 0;
+  }
+  // 칸이 모인 덩어리 중 사진 가장자리에 닿지 않는 가장 큰 것
+  const lab = new Int32Array(gw*gh); let best = null, id = 0;
+  for(let i = 0; i < gw*gh; i++){
+    if(!on[i] || lab[i]) continue; id++;
+    let minx = 1e9, miny = 1e9, maxx = -1, maxy = -1, cnt = 0, edge = false; const st = [i]; lab[i] = id;
+    while(st.length){
+      const p = st.pop(), x = p % gw, y = (p / gw) | 0; cnt++;
+      if(x < minx) minx = x; if(x > maxx) maxx = x; if(y < miny) miny = y; if(y > maxy) maxy = y;
+      if(x === 0 || y === 0 || x === gw-1 || y === gh-1) edge = true;
+      for(const q of [p-1, p+1, p-gw, p+gw]){ if(q < 0 || q >= gw*gh || Math.abs((q % gw) - x) > 1) continue; if(on[q] && !lab[q]){ lab[q] = id; st.push(q); } }
+    }
+    const score = cnt * (edge ? 0.3 : 1);
+    if(cnt >= 12 && (!best || score > best.score)) best = { score, minx, miny, maxx, maxy };
+  }
+  if(!best) return null;
+  let x0 = best.minx*G, y0 = best.miny*G, x1 = (best.maxx+1)*G, y1 = (best.maxy+1)*G;
+  const bw = x1 - x0, bh = y1 - y0;
+  x0 -= bw*0.6; x1 += bw*0.08; y0 -= bh*0.25; y1 += bh*0.06;   // 왼쪽 각도 라벨·위쪽 머리줄까지 포함
+  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W, x1); y1 = Math.min(H, y1);
+  return { x: x0/k, y: y0/k, w: (x1-x0)/k, h: (y1-y0)/k };
+}
+
+/** #(절대값) 화면이면 L*·a*·b*라서 검산이 대부분 크게 어긋남 */
+function looksAbsolute(rows){
+  const full = rows.filter(r => [r.dE, r.dL, r.da, r.db].every(v => v !== null && v !== undefined));
+  const off = full.filter(r => Math.abs(Math.sqrt(r.dL**2 + r.da**2 + r.db**2) - r.dE) > 0.3);
+  return full.length >= 3 && off.length >= Math.ceil(full.length * 0.6);
+}
+
 async function ocr(file){
   const { img, url } = await loadImage(file);
-  const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
-  const c = document.createElement("canvas");
-  c.width = Math.round(img.naturalWidth*scale); c.height = Math.round(img.naturalHeight*scale);
-  const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, c.width, c.height);
+  let rows = await readTable(cropCanvas(img, 0, 0, img.naturalWidth, img.naturalHeight, 2000));
+  if(rows.length < 4){
+    const box = findTableBox(img);
+    if(box && box.w * box.h < img.naturalWidth * img.naturalHeight * 0.7){
+      $("busyText").textContent = "색차계 화면을 찾아 다시 읽는 중…";
+      const r2 = await readTable(cropCanvas(img, box.x, box.y, box.w, box.h, 1600));
+      if(r2.length > rows.length) rows = r2;
+    }
+  }
+  return { rows, img: url, absolute: looksAbsolute(rows) };
+}
+
+/** 사진 중 보이는 부분(원본 좌표)만 다시 읽기 */
+async function ocrRegion(src, box){
+  const img = await loadImg(src);
+  return readTable(cropCanvas(img, box.x, box.y, box.w, box.h, 1600));
+}
+
+async function readTable(c){
+  const ctx = c.getContext("2d", { willReadFrequently: true });
   const cl = cleanBin(binarize(c));
   await getWorker();
   $("busyText").textContent = (typeof batch !== "undefined" && batch ? batchLabel() + " · " : "") + "숫자를 읽는 중…";
@@ -482,7 +556,7 @@ async function ocr(file){
   const used = new Set(found.map(r => r.angle).filter(Boolean));
   const left = ORDER.filter(a => !used.has(a));
   found.forEach(r => { if(!r.angle) r.angle = left.shift() || "?"; });
-  return { rows: found.map(({ y, ...r }) => r), img: url };
+  return found.map(({ y, ...r }) => r);
 }
 
 
@@ -622,24 +696,61 @@ function skipBatchPhoto(){
 async function onPhoto(file){
   showErr(""); $("busy").hidden = false; $("shootBtn").classList.add("off");
   $("busyText").textContent = batch ? batchLabel() + " 읽는 중… (Point " + point + ")" : "사진을 읽는 중…";
-  let rows = emptyRows(), img = null, read = 0;
+  let rows = emptyRows(), img = null, read = 0, absolute = false;
   try{
     if(typeof Tesseract === "undefined") throw new Error("noocr");
     const res = await ocr(file);
-    img = res.img;
-    res.rows.forEach(o => {
-      const r = rows.find(x => x.angle === o.angle); if(!r) return;
-      COLS.forEach(k => { if(o[k] !== null && o[k] !== undefined){ r[k] = o[k]; r.auto[k] = true; read++; } });
-      r.status = o.status;
-    });
+    img = res.img; absolute = res.absolute;
+    read = fillRows(rows, res.rows);
   }catch(e){
     if(!img){ try{ img = URL.createObjectURL(file); }catch(_){ img = null; } }
   }finally{
     $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = ""; $("album").value = "";
   }
   if(!img){ showErr("사진을 열지 못했습니다. 다시 찍어 주세요."); return; }
-  newDraft(rows, img); openEntry();
-  toast(read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요" : "숫자를 읽지 못했습니다. 사진을 보며 직접 입력해 주세요");
+  newDraft(rows, img); current.absolute = absolute; openEntry();
+  toast(absolute ? "색차계가 # (절대값) 화면 같습니다. 색차계에서 Δ를 누르고 다시 찍어 주세요"
+    : read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요"
+    : "숫자를 읽지 못했습니다. 사진을 표가 꽉 차게 확대하고 '이 부분 읽기'를 눌러 보세요");
+}
+
+/** 읽은 값을 표에 채움. onlyOpen이면 비었거나 자동으로 채운 칸만 바꿈. 채운 칸 수를 돌려줌 */
+function fillRows(rows, found, onlyOpen){
+  let n = 0;
+  found.forEach(o => {
+    const r = rows.find(x => x.angle === o.angle); if(!r) return;
+    COLS.forEach(k => {
+      if(o[k] === null || o[k] === undefined) return;
+      if(onlyOpen && r[k] !== null && !(r.auto && r.auto[k])) return;
+      r[k] = o[k]; r.auto = r.auto || {}; r.auto[k] = true; n++;
+    });
+    r.status = o.status;
+  });
+  return n;
+}
+
+/** 확대해서 보이는 부분만 다시 읽기 */
+async function readVisible(){
+  if(!current || !current.img) return;
+  const sc = $("phScroll"), im = $("phImg");
+  const nw = im.naturalWidth, nh = im.naturalHeight; if(!nw) return;
+  const Wz = im.clientWidth, Hz = im.clientHeight, s = Math.min(Wz / nw, Hz / nh);
+  const ox = (Wz - nw*s) / 2, oy = (Hz - nh*s) / 2;
+  let x0 = (sc.scrollLeft - ox) / s, y0 = (sc.scrollTop - oy) / s;
+  let x1 = (sc.scrollLeft + sc.clientWidth - ox) / s, y1 = (sc.scrollTop + sc.clientHeight - oy) / s;
+  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(nw, x1); y1 = Math.min(nh, y1);
+  if(x1 - x0 < 20 || y1 - y0 < 20) return;
+  const btn = $("readHere"); btn.disabled = true; btn.textContent = "읽는 중…";
+  try{
+    const found = await ocrRegion(current.img, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    commitBuf(false);
+    const n = fillRows(current.rows, found, true);
+    current.absolute = looksAbsolute(found);
+    saveDraft(); cur = firstTodo(); renderEntry();
+    toast(current.absolute ? "색차계가 # (절대값) 화면 같습니다. Δ로 바꿔 다시 찍어 주세요"
+      : n ? n + "칸을 읽었습니다. 사진과 대조해 주세요" : "읽지 못했습니다. 표가 화면에 꽉 차게 확대해서 다시 눌러 보세요");
+  }catch(e){ toast("읽지 못했습니다. 다시 눌러 보세요"); }
+  finally{ btn.disabled = false; btn.textContent = "이 부분 읽기"; }
 }
 
 /* ---------- 사진 확대·회전 ---------- */
@@ -674,6 +785,7 @@ $("phScroll").addEventListener("pointerup", e => {
 $("zIn").addEventListener("click", () => setZoom(zoom * 1.5));
 $("zOut").addEventListener("click", () => setZoom(zoom / 1.5));
 $("rot").addEventListener("click", rotatePhoto);
+$("readHere").addEventListener("click", readVisible);
 
 /* ---------- 전체화면 확인·입력 ---------- */
 
@@ -750,6 +862,7 @@ function renderEntry(){
   st.append(el("span", "", "입력 " + filled + "/" + N));
   if(kf.length) st.append(el("span", "pill fail", "핵심 불합격 " + kf.join(", ")));
   else if(filled) st.append(el("span", "pill pass", "핵심 각도 합격"));
+  if(current.absolute) st.append(el("span", "pill fail", "# 화면 같음 · 색차계에서 Δ로 바꿔 다시 찍으세요"));
   if(bad.length) st.append(el("span", "pill warn", "검산 ⚠ " + bad.join(", ")));
   if(autoLeft) st.append(el("span", "", "점선 칸은 자동으로 읽은 값입니다. 부호까지 사진과 대조하세요."));
   else if(cur >= N) st.append(el("span", "done", filled === N ? "모두 입력했습니다. 저장을 누르세요." : "끝까지 왔습니다. 빈 칸을 눌러 채우거나 저장하세요."));
