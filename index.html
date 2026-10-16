@@ -155,6 +155,14 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 @media (max-height:680px){.pad button{height:44px}.grid{max-height:40vh}.cell,.lab{min-height:38px}}
 
 .toast{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px)}
+.ocrstat{font-size:13px;margin:10px 0 0;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ocrstat:empty{display:none}
+.ocrstat.ready{color:var(--pass)}
+.ocrstat.failed{color:var(--fail);font-weight:600}
+.ocrstat button{font:inherit;font-size:13px;font-weight:600;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:3px 10px;cursor:pointer}
+.inapp{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:12px 14px;display:grid;gap:10px;font-size:14px}
+.inapp p{margin:0}
+.ver{font-size:12px;color:var(--muted);text-align:center;margin:0}
 .auto{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:14px;cursor:pointer}
 .auto input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
 .auto small{display:block;font-size:12px;color:var(--muted)}
@@ -165,9 +173,17 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 </head>
 <body>
 <div class="wrap">
+  <div class="inapp" id="inapp" role="alert" hidden>
+    <p><b id="inappWho">앱 안의 브라우저</b>에서 열려 있습니다. 여기서는 사진 판독이 안 될 수 있으니 <b>크롬</b>이나 <b>삼성 인터넷</b>으로 열어 주세요.</p>
+    <div class="actions">
+      <button class="btn primary small" id="inappOpen" type="button">다른 브라우저로 열기</button>
+      <button class="btn small" id="inappCopy" type="button">주소 복사</button>
+    </div>
+    <p class="hint" style="margin:0">버튼이 안 되면 화면 오른쪽 위나 아래의 ⋮ 메뉴에서 "다른 브라우저로 열기"를 누르세요.</p>
+  </div>
   <header>
     <h1>색차 측정 기록</h1>
-    <p class="sub">색차계 화면을 찍으면 ΔE*ab 값이 자동으로 채워집니다. 사진을 보며 확인하고 숫자판으로 고친 뒤 저장하세요. 핵심 각도는 25°, 45°, 75°입니다.</p>
+    <p class="sub">색차계 화면(Δ 화면)을 찍으면 ΔE*ab 값을 읽어 바로 저장합니다. 확실하지 않은 값이 있으면 확인 화면이 열려 사진을 보며 고칠 수 있습니다. 핵심 각도는 25°, 45°, 75°입니다.</p>
   </header>
 
   <section class="card">
@@ -200,6 +216,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
       <span>색차계 화면 찍기</span>
       <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍기">
     </label>
+    <p class="ocrstat" id="ocrStat" aria-live="polite"></p>
     <label class="auto"><input type="checkbox" id="autoSave"> 찍으면 바로 저장 <small>(24칸이 다 읽히고 검산이 모두 맞을 때만. 아니면 확인 화면이 열립니다)</small></label>
     <div class="row2">
       <span class="linkbtn">앨범에서 고르기 (여러 장 가능)<input type="file" id="album" accept="image/*" multiple aria-label="앨범에서 사진 고르기, 여러 장 가능"></span>
@@ -238,6 +255,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
   </section>
 </div>
 
+<p class="ver" id="ver"></p>
 <div class="ov" id="entry" role="dialog" aria-modal="true" aria-labelledby="ovTitle" hidden>
   <div class="ov-top">
     <div class="ov-title"><strong id="ovTitle"></strong><span id="ovMeta"></span></div>
@@ -274,7 +292,9 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 <div class="snack" id="snack" role="status" hidden><span id="snackText"></span><button type="button" id="snackUndo">되돌리기</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>window.Tesseract || document.write('<script src="https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js"><\/script>');</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.XLSX || document.write('<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');</script>
 <script>
 /* ===== 관리자 설정 =====
    SHEET_URL: 구글 시트의 Apps Script를 "웹 앱"으로 배포하고 받은 주소 (…/exec). 비워 두면 시트 전송을 쓰지 않습니다.
@@ -380,8 +400,24 @@ function cleanBin(bin){
   const W = bin.width, H = bin.height, d = bin.getContext("2d").getImageData(0, 0, W, H).data;
   let ink = new Uint8Array(W*H); for(let i=0; i<W*H; i++) ink[i] = d[i*4] === 0 ? 1 : 0;
   const kill = new Uint8Array(W*H), hMin = Math.round(W*0.07), vMin = Math.round(H*0.04);
-  for(let y=0; y<H; y++){ let s=-1; for(let x=0; x<=W; x++){ const v = x<W && ink[y*W+x]; if(v && s<0) s=x; if(!v && s>=0){ if(x-s >= hMin) for(let k=s; k<x; k++) kill[y*W+k]=1; s=-1; } } }
-  for(let x=0; x<W; x++){ let s=-1; for(let y=0; y<=H; y++){ const v = y<H && ink[y*W+x]; if(v && s<0) s=y; if(!v && s>=0){ if(y-s >= vMin) for(let k=s; k<y; k++) kill[k*W+x]=1; s=-1; } } }
+  // 표 테두리 지우기. 사진의 모아레 때문에 선이 점선처럼 끊기므로 짧은 틈(GAP)은 이어진 것으로 보고,
+  // 1px 기울어진 선도 잡도록 옆 칸까지 함께 봄. 선은 잉크가 촘촘(80% 이상)하고 글자보다 훨씬 김
+  const GAP = 8;
+  const scan = (len, n, at, mark, minLen) => {
+    for(let a=0; a<n; a++){
+      let s = -1, last = -1, cnt = 0;
+      const flush = () => { if(s >= 0 && last - s + 1 >= minLen && cnt >= (last - s + 1) * 0.9) for(let b=s; b<=last; b++) mark(a, b); };
+      for(let b=0; b<len; b++){
+        if(at(a, b)){ if(s < 0 || b - last > GAP){ flush(); s = b; cnt = 0; } last = b; cnt++; }
+      }
+      flush();
+    }
+  };
+  const inkAt = (x, y) => x >= 0 && x < W && ink[y*W+x];
+  scan(W, H, (y, x) => inkAt(x, y) || (y > 0 && inkAt(x, y-1)) || (y < H-1 && inkAt(x, y+1)),
+    (y, x) => { kill[y*W+x] = 1; }, hMin);
+  scan(H, W, (x, y) => inkAt(x, y) || inkAt(x-1, y) || inkAt(x+1, y),
+    (x, y) => { kill[y*W+x] = 1; }, vMin);
   for(let i=0; i<W*H; i++) if(kill[i]) ink[i]=0;
   for(let pass=0; pass<2; pass++){
     const n = new Uint8Array(W*H);
@@ -420,11 +456,33 @@ function segment(cl){
   });
 }
 
-async function getWorker(){
-  if(worker) return worker;
-  $("busyText").textContent = "처음 한 번은 문자인식 데이터를 받느라 조금 더 걸립니다…";
-  worker = await Tesseract.createWorker("eng");
-  return worker;
+/* 판독 엔진(약 7MB, 처음 한 번만 받음). jsDelivr가 막히면 unpkg에서 다시 받음 */
+const OCR_SOURCES = [
+  {},
+  { workerPath: "https://unpkg.com/tesseract.js@5.1.1/dist/worker.min.js",
+    corePath: "https://unpkg.com/tesseract.js-core@5.1.1",
+    langPath: "https://unpkg.com/@tesseract.js-data/eng@1.0.0/4.0.0_best_int" },
+];
+let workerP = null;
+function ocrStatus(st){ if(typeof setOcrStatus === "function") setOcrStatus(st); }
+function withTimeout(p, ms){ return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]); }
+function getWorker(){
+  if(worker) return Promise.resolve(worker);
+  if(workerP) return workerP;
+  ocrStatus("loading");
+  workerP = (async () => {
+    if(typeof Tesseract === "undefined") throw new Error("ocr_load");
+    for(const src of OCR_SOURCES){
+      try{
+        worker = await withTimeout(Tesseract.createWorker("eng", 1, { ...src, errorHandler: () => {} }), 90000);
+        ocrStatus("ready");
+        return worker;
+      }catch(e){ worker = null; }
+    }
+    throw new Error("ocr_load");
+  })();
+  workerP.catch(() => { workerP = null; ocrStatus("failed"); });
+  return workerP;
 }
 
 async function cropOCR(cl, x0, y0, x1, y1, whitelist){
@@ -517,18 +575,34 @@ function findTableBox(img){
 function looksAbsolute(rows){
   const full = rows.filter(r => [r.dE, r.dL, r.da, r.db].every(v => v !== null && v !== undefined));
   const off = full.filter(r => Math.abs(Math.sqrt(r.dL**2 + r.da**2 + r.db**2) - r.dE) > 0.3);
-  return (rows.wideRows || 0) >= 3 || (full.length >= 3 && off.length >= Math.ceil(full.length * 0.6));
+  // Δ 화면도 dC·dh 칸이 있어 칸 수로는 구분이 안 됨. # 화면이면 L*·a*·b*·C*라 검산이 크게 어긋남
+  return full.length >= 3 && off.length >= Math.ceil(full.length * 0.6);
+}
+
+/** 같은 각도 줄끼리 합치기: 검산이 맞는 줄을 우선, 아니면 빈 칸을 다른 쪽 값으로 채움 */
+function rowOk(r){ return r && [r.dE, r.dL, r.da, r.db].every(v => v !== null && v !== undefined) && Math.abs(Math.sqrt(r.dL**2 + r.da**2 + r.db**2) - r.dE) <= 0.02; }
+function mergeRows(a, b){
+  const angles = ORDER.filter(x => a.some(r => r.angle === x) || b.some(r => r.angle === x));
+  return angles.map(angle => {
+    const ra = a.find(r => r.angle === angle), rb = b.find(r => r.angle === angle);
+    if(!ra) return rb; if(!rb) return ra;
+    if(rowOk(ra)) return ra; if(rowOk(rb)) return rb;
+    const m = { ...ra };
+    ["dE", "dL", "da", "db"].forEach(k => { if(m[k] === null || m[k] === undefined) m[k] = rb[k]; });
+    return m;
+  });
 }
 
 async function ocr(file){
   const { img, url } = await loadImage(file);
   let rows = await readTable(cropCanvas(img, 0, 0, img.naturalWidth, img.naturalHeight, 2000));
-  if(rows.length < 4){
+  // 표 부분만 잘라 원본 화질로 한 번 더 읽고 합침 (멀리서 찍었거나 칸을 놓친 경우 대비)
+  if(rows.length < ORDER.length || !rows.every(rowOk)){
     const box = findTableBox(img);
-    if(box && box.w * box.h < img.naturalWidth * img.naturalHeight * 0.7){
-      $("busyText").textContent = "색차계 화면을 찾아 다시 읽는 중…";
+    if(box && box.w * box.h < img.naturalWidth * img.naturalHeight * 0.85){
+      $("busyText").textContent = (typeof batch !== "undefined" && batch ? batchLabel() + " · " : "") + "한 번 더 확인하는 중…";
       const r2 = await readTable(cropCanvas(img, box.x, box.y, box.w, box.h, 1600));
-      if(r2.length > rows.length) rows = r2;
+      rows = mergeRows(rows, r2);
     }
   }
   return { rows, img: url, absolute: looksAbsolute(rows) };
@@ -547,18 +621,46 @@ async function readTable(c){
   $("busyText").textContent = (typeof batch !== "undefined" && batch ? batchLabel() + " · " : "") + "숫자를 읽는 중…";
   const minW = cl.width*0.05, found = [];
   let wideRows = 0;   // 값 칸이 5개 이상인 줄 = # 화면(L* a* b* C* h)일 가능성
+  // 1) 데이터 줄 고르기: 라벨 = 앞쪽 두 덩어리 중 더 넓은 것(각도 글자가 숫자 칸보다 넓음, 왼쪽 테두리 잡티 대비)
+  const rowsInfo = [];
   for(const band of segment(cl)){
-    const segs = band.segs.filter(s => s[1]-s[0] >= minW);
-    if(segs.length < 5) continue;
+    const bh = band.y1 - band.y0;
+    const segs = band.segs.filter(s => s[1]-s[0] >= Math.min(minW, bh * 0.9));
+    if(segs.length < 4) continue;
     if(segs.length >= 6) wideRows++;
-    const cells = segs.slice(-4), labelSeg = segs[segs.length-5];
-    const vals = []; for(const sg of cells) vals.push(await readValue(cl, sg, band));
-    if(vals.filter(v => v !== null).length < 3) continue;
+    const li = segs.length > 4 && (segs[1][1]-segs[1][0]) > (segs[0][1]-segs[0][0]) ? 1 : 0;
+    if(segs.length - li < 4) continue;
+    rowsInfo.push({ band, labelSeg: segs[li], vals: segs.slice(li + 1) });
+  }
+  // 2) dE·dL·da·db 칸의 가로 위치를 줄들에서 모아 정함 (가운데값). 한 칸을 놓쳐도 옆 값이 밀려 들어가지 않게
+  const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
+  const mid = sg => (sg[0] + sg[1]) / 2, wid = sg => sg[1] - sg[0];
+  const full = rowsInfo.filter(r => r.vals.length >= 4);
+  const typW = med(full.flatMap(r => r.vals.slice(0, 4).map(wid)));
+  const good = full.filter(r => r.vals.slice(0, 4).every(sg => wid(sg) < typW * 1.5));
+  const base = good.length ? good : full;
+  const colX = base.length ? [0, 1, 2, 3].map(k => med(base.map(r => mid(r.vals[k])))) : null;
+  const pitch = colX ? med([colX[1]-colX[0], colX[2]-colX[1], colX[3]-colX[2]]) : 0;
+
+  for(const { band, labelSeg, vals: vsegs } of rowsInfo){
+    let cells;
+    if(colX && pitch > 0){
+      // 각 칸 범위(가운데 ± 반 칸)에 걸치는 덩어리를 그 칸에 넣음. 두 칸에 걸친 덩어리는 칸 경계에서 잘라 각각 읽음
+      cells = colX.map(cx => {
+        const lo = cx - pitch / 2, hi = cx + pitch / 2;
+        const parts = vsegs.filter(sg => Math.min(sg[1], hi) - Math.max(sg[0], lo) > Math.min(wid(sg), pitch) * 0.35);
+        if(!parts.length) return null;
+        return [Math.max(lo, Math.min(...parts.map(sg => sg[0]))), Math.min(hi, Math.max(...parts.map(sg => sg[1])))];
+      });
+    } else cells = vsegs.slice(0, 4);
+    const vals = []; for(const sg of cells) vals.push(sg ? await readValue(cl, sg, band) : null);
+    if(vals.filter(v => v !== null).length < 2) continue;
     const lt = await cropOCR(cl, labelSeg[0], band.y0, labelSeg[1], band.y1, "0123456789-ras");
     const lm = lt.match(/as(-?\d{2,3})$/);
     let angle = lm ? "r45as" + lm[1] : null;
     if(angle && !ORDER.includes(angle)) angle = null;
-    const box = { x0: cells[0][0], y0: band.y0, x1: cells[0][1], y1: band.y1 };
+    const dEseg = cells[0] || cells.find(Boolean);
+    const box = { x0: dEseg[0], y0: band.y0, x1: dEseg[1], y1: band.y1 };
     found.push({ angle, y: band.y0, dE: vals[0], dL: vals[1], da: vals[2], db: vals[3],
       status: redRatio(ctx, box) > 0.25 ? "fail" : "pass" });
   }
@@ -720,13 +822,15 @@ function skipBatchPhoto(){
 async function onPhoto(file){
   showErr(""); $("busy").hidden = false; $("shootBtn").classList.add("off");
   $("busyText").textContent = batch ? batchLabel() + " 읽는 중… (Point " + point + ")" : "사진을 읽는 중…";
-  let rows = emptyRows(), img = null, read = 0, absolute = false;
+  let rows = emptyRows(), img = null, read = 0, absolute = false, engineFail = false;
   try{
     if(typeof Tesseract === "undefined") throw new Error("noocr");
+    await getWorker();
     const res = await ocr(file);
     img = res.img; absolute = res.absolute;
     read = fillRows(rows, res.rows);
   }catch(e){
+    engineFail = !!(e && (e.message === "ocr_load" || e.message === "noocr"));
     if(!img){ try{ img = URL.createObjectURL(file); }catch(_){ img = null; } }
   }finally{
     $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = ""; $("album").value = "";
@@ -740,7 +844,8 @@ async function onPhoto(file){
     current.img = img;                                 // 저장 실패: 확인 화면으로
   } else newDraft(rows, img);
   current.absolute = absolute; openEntry();
-  toast(absolute ? "색차계가 # (절대값) 화면 같습니다. 색차계에서 Δ를 누르고 다시 찍어 주세요"
+  toast(engineFail ? "사진 판독 기능을 받지 못했습니다. 인터넷(회사 와이파이면 LTE)을 확인해 주세요. 지금은 사진을 보며 직접 입력하세요"
+    : absolute ? "색차계가 # (절대값) 화면 같습니다. 색차계에서 Δ를 누르고 다시 찍어 주세요"
     : read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요"
     : "숫자를 읽지 못했습니다. 사진을 표가 꽉 차게 확대하고 '이 부분 읽기'를 눌러 보세요");
 }
@@ -1196,6 +1301,48 @@ $("xlsxBtn").addEventListener("click", downloadXlsx);
 $("shareBtn").addEventListener("click", shareXlsx);
 window.addEventListener("beforeunload", e => { if(hasValues()){ e.preventDefault(); e.returnValue = ""; } });
 
+/* ---------- 판독 준비 상태 · 앱 안 브라우저 안내 ---------- */
+
+const APP_VERSION = "2026-10-16";
+function setOcrStatus(st){
+  const p = $("ocrStat"); p.className = "ocrstat " + st; p.textContent = "";
+  if(st === "loading") p.textContent = "사진 판독 준비 중… (처음 한 번만 약 7MB를 받습니다)";
+  else if(st === "ready") p.textContent = "✓ 사진 판독 준비됨";
+  else if(st === "failed"){
+    p.append("사진 판독을 준비하지 못했습니다. 인터넷 연결(회사 와이파이라면 LTE)을 확인해 주세요. ");
+    const b = el("button", "", "다시 시도"); b.type = "button"; b.addEventListener("click", () => getWorker().catch(() => {}));
+    p.append(b);
+  }
+}
+function inAppBrowser(){
+  const ua = navigator.userAgent || "";
+  if(/KAKAOTALK/i.test(ua)) return "카카오톡";
+  if(/NAVER\(inapp/i.test(ua)) return "네이버 앱";
+  if(/Instagram/i.test(ua)) return "인스타그램";
+  if(/FBAN|FBAV/i.test(ua)) return "페이스북";
+  if(/\bLine\//i.test(ua)) return "라인";
+  if(/\bBAND\//i.test(ua)) return "밴드";
+  return "";
+}
+function openOutside(){
+  const url = location.href, ua = navigator.userAgent || "";
+  if(/KAKAOTALK/i.test(ua)){ location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(url); return; }
+  if(/Android/i.test(ua)){ location.href = "intent://" + url.replace(/^https?:\/\//, "") + "#Intent;scheme=https;package=com.android.chrome;end"; return; }
+  toast("오른쪽 아래 메뉴에서 'Safari로 열기'를 눌러 주세요");
+}
+(function(){
+  $("ver").textContent = "앱 버전 " + APP_VERSION;
+  const who = inAppBrowser();
+  if(who){ $("inapp").hidden = false; $("inappWho").textContent = who + " 안의 브라우저"; }
+  $("inappOpen").addEventListener("click", openOutside);
+  $("inappCopy").addEventListener("click", async () => {
+    try{ await navigator.clipboard.writeText(location.href); toast("주소를 복사했습니다. 크롬에 붙여넣어 여세요"); }
+    catch(e){ toast(location.href); }
+  });
+  if(typeof Tesseract === "undefined") setOcrStatus("failed");
+  else setTimeout(() => getWorker().catch(() => {}), 300);   // 앱을 열자마자 판독 엔진을 미리 받아 둠
+})();
+
 records = load(STORE, []); if(!Array.isArray(records)) records = [];
 $("autoSave").checked = load("cm_autosave", true) !== false;
 renderProducts(); restoreForm(); formReady = true; onProductChange();
@@ -1211,4 +1358,5 @@ if(SHEET_URL){ resendAll(); window.addEventListener("online", resendAll); }
 </script>
 </body>
 </html>
+
 
