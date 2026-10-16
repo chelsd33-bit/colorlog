@@ -59,7 +59,7 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .pc.on small{color:var(--accent-ink)}
 .pc.done::after{content:"✓";position:absolute;top:-7px;right:-5px;width:18px;height:18px;border-radius:50%;background:var(--pass);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
 .pc.done.fail::after{background:var(--fail);content:"!"}
-.shoot{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:16px;font-size:17px;font-weight:600;cursor:pointer;position:relative}
+.shoot{font:inherit;border:0;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:16px;font-size:17px;font-weight:600;cursor:pointer;position:relative}
 .shoot:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .shoot.off{opacity:.55;pointer-events:none}
 .shoot input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
@@ -168,6 +168,18 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .auto small{display:block;font-size:12px;color:var(--muted)}
 .snack{position:fixed;z-index:21;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 8px 8px 16px;border-radius:8px;font-size:14px;width:max-content;max-width:calc(100% - 32px);display:flex;gap:12px;align-items:center}
 .snack button{font:inherit;font-weight:700;background:none;border:0;color:var(--accent-soft);padding:8px 10px;cursor:pointer;flex:none}
+/* 앱 카메라 */
+.cam{position:fixed;inset:0;z-index:30;background:#000;display:flex;flex-direction:column}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam-guide{position:absolute;left:8%;right:8%;top:16%;bottom:22%;border:3px solid rgba(255,255,255,.95);border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
+.cam-guide span{position:absolute;left:0;right:0;top:-34px;text-align:center;color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 3px #000}
+.cam-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;color:#fff;font-size:12px;font-family:var(--mono)}
+.cam-top .btn{background:rgba(0,0,0,.55);color:#fff;border-color:rgba(255,255,255,.5)}
+.cam-bottom{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px))}
+.shutter{width:76px;height:76px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.25);cursor:pointer}
+.shutter:active{background:rgba(255,255,255,.6)}
+.shutter:disabled{opacity:.5}
+.cam-tip{position:absolute;left:12px;right:12px;bottom:calc(112px + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 3px #000}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -211,15 +223,15 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
     </div>
     <datalist id="colorList"></datalist>
 
-    <label class="shoot" id="shootBtn">
+    <button class="shoot" id="shootBtn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
       <span>색차계 화면 찍기</span>
-      <input type="file" id="photo" accept="image/*" capture="environment" aria-label="색차계 화면 찍기">
-    </label>
+    </button>
     <p class="ocrstat" id="ocrStat" aria-live="polite"></p>
     <label class="auto"><input type="checkbox" id="autoSave"> 찍으면 바로 저장 <small>(24칸이 다 읽히고 검산이 모두 맞을 때만. 아니면 확인 화면이 열립니다)</small></label>
     <div class="row2">
       <span class="linkbtn">앨범에서 고르기 (여러 장 가능)<input type="file" id="album" accept="image/*" multiple aria-label="앨범에서 사진 고르기, 여러 장 가능"></span>
+      <span class="linkbtn">휴대폰 기본 카메라로 찍기<input type="file" id="photo" accept="image/*" capture="environment" aria-label="휴대폰 기본 카메라로 찍기"></span>
       <button class="linkbtn" id="manualBtn" type="button">사진 없이 입력</button>
     </div>
     <p class="hint">표가 화면에 꽉 차게, 정면에서 반사 없이 찍으면 잘 읽힙니다.</p>
@@ -288,6 +300,13 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
     <button type="button" class="fn" data-k="neg" aria-label="부호 바꾸기">+/−</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" class="go" data-k="save" id="saveKey">저장</button>
   </div>
 </div>
+<div class="cam" id="cam" role="dialog" aria-modal="true" aria-label="색차계 화면 찍기" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="cam-guide"><span>표(각도 ~ db 칸)가 이 틀에 꽉 차게</span></div>
+  <div class="cam-top"><span id="camInfo"></span><button class="btn small" id="camClose" type="button">닫기</button></div>
+  <p class="cam-tip">Δ 화면인지 확인하고, 반사가 없게 정면에서 찍으세요</p>
+  <div class="cam-bottom"><button class="shutter" id="camShot" type="button" aria-label="찍기"></button></div>
+</div>
 <div class="toast" id="toast" hidden></div>
 <div class="snack" id="snack" role="status" hidden><span id="snackText"></span><button type="button" id="snackUndo">되돌리기</button></div>
 
@@ -309,6 +328,33 @@ const PRODUCTS = [
   { name: "JG S/REP",   points: 3, side: true },
 ];
 /* [코드, 이름, 실제 색]. PAQ 앱과 같은 현장 색상표 */
+/* 부품 기준 ΔE (25°, 45°, 75°). dE가 기준 이하면 합격, 넘으면 불합격.
+   KCC·KNK 색차 기준표의 "부품 ΔE" 열. "(무)"가 붙은 칼라는 같은 코드의 기준을 씀.
+   기준이 없는 칼라는 색차계 화면의 빨간 칸으로 판정함. */
+const SPEC = {
+  // KCC
+  PH3: [3.15, 1.20, 1.66], NCM: [3.23, 1.20, 1.22], MPE: [3.30, 1.20, 1.65], SSS: [3.26, 1.20, 1.65], SMZ: [3.06, 1.20, 2.61],
+  BCA: [2.69, 1.20, 1.80], CBA: [2.69, 1.20, 1.80], HT7: [2.69, 1.20, 1.80], NRB: [2.69, 1.20, 1.80], LAG: [2.69, 1.20, 1.56],
+  // KNK (1·2번은 표에서 칼라 이름이 가려져 있어 UYH·FT7로 봄)
+  UYH: [2.18, 1.00, 1.22], FT7: [2.18, 1.00, 1.22],
+  VET: [2.69, 1.20, 1.41], NAE: [1.93, 1.20, 1.58], DAL: [2.45, 1.20, 1.73], MAB: [2.92, 1.20, 1.73],
+};
+const SPEC_ANGLES = ["r45as25", "r45as45", "r45as75"];
+function specFor(color, angle){
+  const code = String(color || "").toUpperCase().replace(/\s*\(.*\)\s*$/, "").trim();
+  const i = SPEC_ANGLES.indexOf(angle);
+  return SPEC[code] && i >= 0 ? SPEC[code][i] : null;
+}
+/** 기준이 있는 각도는 dE로 합격/불합격을 다시 정함 */
+function applySpec(rows, color){
+  rows.forEach(r => {
+    const lim = specFor(color, r.angle);
+    r.spec = lim;
+    if(lim !== null && r.dE !== null && r.dE !== undefined) r.status = r.dE > lim + 1e-9 ? "fail" : "pass";
+  });
+  return rows;
+}
+
 const COLORS = [
   ["PH3","비크블랙","#202226"], ["UYH","우유니 화이트","#f0f0ee"], ["FT7(무)","마테호른 화이트","#edeff1"], ["SSS","세빌 실버","#c0bfc6"],
   ["NCM","마칼루 그레이","#7a7584"], ["MPE(무)","마칼루 그레이 매트","#6e6975"], ["NRB","카디프 블루","#141b5c"], ["HT7","카디프 그린","#1f2b29"],
@@ -485,13 +531,13 @@ function getWorker(){
   return workerP;
 }
 
-async function cropOCR(cl, x0, y0, x1, y1, whitelist){
-  const pad = 12, sc = 1.5, c = document.createElement("canvas");
+async function cropOCR(cl, x0, y0, x1, y1, whitelist, sc = 1.5, psm = "7"){
+  const pad = 12, c = document.createElement("canvas");
   c.width = Math.round((x1-x0+pad*2)*sc); c.height = Math.round((y1-y0+pad*2)*sc);
   const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
   g.drawImage(cl, x0, y0, x1-x0, y1-y0, pad*sc, pad*sc, (x1-x0)*sc, (y1-y0)*sc);
   const w = await getWorker();
-  await w.setParameters({ tessedit_char_whitelist: whitelist, tessedit_pageseg_mode: "7" });
+  await w.setParameters({ tessedit_char_whitelist: whitelist, tessedit_pageseg_mode: psm });
   const { data } = await w.recognize(c);
   return data.text.trim();
 }
@@ -502,8 +548,16 @@ async function readValue(cl, seg, band){
   const d = cl.getContext("2d").getImageData(x0, y0, w, h).data;
   const ink = (x, y) => d[(y*w+x)*4] === 0;
   const rows = []; for(let y=0; y<h; y++){ let c=0; for(let x=0; x<w; x++) if(ink(x,y)) c++; rows.push(c); }
-  let best = [0, -1], s = -1;
-  for(let y=0; y<=h; y++){ const on = y<h && rows[y] > 0; if(on && s<0) s=y; if(!on && s>=0){ if(y-s > best[1]-best[0]) best=[s,y]; s=-1; } }
+  // 칸 안의 잉크 덩어리(세로 구간)들 중에서 글자 구간 고르기:
+  // 줄의 보통 글자 높이(tH)와 비슷하고, 가로로 가장 넓게 퍼진 것 (숫자는 넓고, 표 모서리 조각은 좁음).
+  // 사진이 기울면 칸마다 글자 높이 위치가 달라서, 줄 전체에 같은 높이 범위를 쓰지 않음
+  const runs = []; let s = -1;
+  for(let y=0; y<=h; y++){ const on = y<h && rows[y] > 0; if(on && s<0) s=y; if(!on && s>=0){ runs.push([s, y]); s=-1; } }
+  const spread = r => { let n = 0; for(let x=0; x<w; x++){ for(let y=r[0]; y<r[1]; y++) if(ink(x,y)){ n++; break; } } return n; };
+  const tH = band.tH || 0;
+  const fit = tH ? runs.filter(r => r[1]-r[0] >= tH*0.6 && r[1]-r[0] <= tH*1.5) : [];
+  let best = [0, -1], bestS = -1;
+  for(const r of (fit.length ? fit : runs)){ const sc = spread(r); if(sc > bestS){ bestS = sc; best = r; } }
   const top = best[0], bot = best[1]-1, th = bot-top+1;
   if(th < 8) return null;
   let run = 0, x = 0;
@@ -517,8 +571,11 @@ async function readValue(cl, seg, band){
   const colHas = cx => { for(let y=top; y<=bot; y++) if(ink(cx,y)) return true; return false; };
   let xs = neg ? x : 0; while(xs < w && !colHas(xs)) xs++;
   let xe = w-1; while(xe > xs && !colHas(xe)) xe--;
-  const t = await cropOCR(cl, x0+xs, y0+top, x0+xe+1, y0+bot+1, "0123456789");
-  const dg = t.replace(/\D/g, "");
+  let dg = "";
+  for(const [sc, psm] of [[1.5, "7"], [2.4, "8"], [1.0, "13"]]){   // 처음 결과가 이상하면 배율과 읽기 방식을 바꿔 다시
+    dg = (await cropOCR(cl, x0+xs, y0+top, x0+xe+1, y0+bot+1, "0123456789", sc, psm)).replace(/\D/g, "");
+    if(dg.length >= 3 && dg.length <= 4) break;
+  }
   if(dg.length < 3 || dg.length > 4) return null;
   return Number(dg.slice(0,-2) + "." + dg.slice(-2)) * (neg ? -1 : 1);
 }
@@ -605,7 +662,7 @@ async function ocr(file){
       rows = mergeRows(rows, r2);
     }
   }
-  return { rows, img: url, absolute: looksAbsolute(rows) };
+  return { rows, img: url, absolute: looksAbsolute(rows), size: img.naturalWidth + "×" + img.naturalHeight };
 }
 
 /** 사진 중 보이는 부분(원본 좌표)만 다시 읽기 */
@@ -642,6 +699,20 @@ async function readTable(c){
   const colX = base.length ? [0, 1, 2, 3].map(k => med(base.map(r => mid(r.vals[k])))) : null;
   const pitch = colX ? med([colX[1]-colX[0], colX[2]-colX[1], colX[3]-colX[2]]) : 0;
 
+  const cellRun = (sg, band) => {
+    const w = sg[1] - sg[0], h = band.y1 - band.y0, d = cl.getContext("2d").getImageData(sg[0], band.y0, w, h).data;
+    let best = null, st = -1;
+    for(let y = 0; y <= h; y++){
+      let on = false; if(y < h) for(let x = 0; x < w; x++) if(d[(y*w+x)*4] === 0){ on = true; break; }
+      if(on && st < 0) st = y;
+      if(!on && st >= 0){ if(!best || y - st > best[1] - best[0]) best = [st, y]; st = -1; }
+    }
+    return best;
+  };
+  for(const r of rowsInfo){
+    const runs = r.vals.slice(0, 6).map(sg => cellRun(sg, r.band)).filter(Boolean);
+    if(runs.length >= 3) r.band.tH = med(runs.map(x => x[1] - x[0]));
+  }
   for(const { band, labelSeg, vals: vsegs } of rowsInfo){
     let cells;
     if(colX && pitch > 0){
@@ -822,12 +893,12 @@ function skipBatchPhoto(){
 async function onPhoto(file){
   showErr(""); $("busy").hidden = false; $("shootBtn").classList.add("off");
   $("busyText").textContent = batch ? batchLabel() + " 읽는 중… (Point " + point + ")" : "사진을 읽는 중…";
-  let rows = emptyRows(), img = null, read = 0, absolute = false, engineFail = false;
+  let rows = emptyRows(), img = null, read = 0, absolute = false, engineFail = false, size = "";
   try{
     if(typeof Tesseract === "undefined") throw new Error("noocr");
     await getWorker();
     const res = await ocr(file);
-    img = res.img; absolute = res.absolute;
+    img = res.img; absolute = res.absolute; size = res.size || "";
     read = fillRows(rows, res.rows);
   }catch(e){
     engineFail = !!(e && (e.message === "ocr_load" || e.message === "noocr"));
@@ -836,6 +907,7 @@ async function onPhoto(file){
     $("busy").hidden = true; $("shootBtn").classList.remove("off"); $("photo").value = ""; $("album").value = "";
   }
   if(!img){ showErr("사진을 열지 못했습니다. 다시 찍어 주세요."); return; }
+  applySpec(rows, meta().color);
   if(autoOn() && read === N && !absolute && !rows.some(badCheck) && !checkMeta()){
     const p = point, snap = JSON.parse(JSON.stringify(rows));
     newDraft(rows, img); current.img = null;          // 되돌리기에 쓰려고 사진은 따로 보관
@@ -843,7 +915,7 @@ async function onPhoto(file){
     if(res){ setLastAuto({ id: res.rec.id, rows: snap, img, point: p }); showSnack(res.msg); return; }
     current.img = img;                                 // 저장 실패: 확인 화면으로
   } else newDraft(rows, img);
-  current.absolute = absolute; openEntry();
+  current.absolute = absolute; current.size = size; openEntry();
   toast(engineFail ? "사진 판독 기능을 받지 못했습니다. 인터넷(회사 와이파이면 LTE)을 확인해 주세요. 지금은 사진을 보며 직접 입력하세요"
     : absolute ? "색차계가 # (절대값) 화면 같습니다. 색차계에서 Δ를 누르고 다시 찍어 주세요"
     : read ? read + "칸을 자동으로 채웠습니다. 사진과 대조해 주세요"
@@ -934,7 +1006,7 @@ function openEntry(){
   const m = meta();
   $("ovTitle").textContent = [m.product, m.side, "Point " + m.point, batchLabel()].filter(Boolean).join(" · ");
   $("ovSkip").hidden = !batch;
-  $("ovMeta").textContent = [md(m.date), m.color, m.sample, m.note].filter(Boolean).join(" · ") || "ΔE*ab";
+  $("ovMeta").textContent = [md(m.date), m.color, m.sample, m.note, current.size ? "사진 " + current.size : ""].filter(Boolean).join(" · ") || "ΔE*ab";
   $("entry").classList.toggle("nophoto", !current.img);
   if(current.img) $("phImg").src = current.img; else $("phImg").removeAttribute("src");
   cur = firstTodo(); buf = ""; confirmShown = false; $("ovConfirm").hidden = true;
@@ -962,17 +1034,22 @@ function preview(b){
   return (neg ? "−" : "") + (t || "");
 }
 function renderEntry(){
+  applySpec(current.rows, meta().color);
   const g = $("grid"); g.textContent = "";
   g.append(el("span", "gh", "각도"), ...COLS.map(k => el("span", "gh", k)));
   current.rows.forEach((r, ri) => {
     const lab = el("button", "lab " + r.status + (KEY.includes(r.angle) ? " key" : "") + (r.status === "fail" ? " fail" : ""));
     lab.type = "button";
     lab.append(el("b", "", short(r.angle)));
-    const s = el("small", "", r.status === "fail" ? "불합격" : "합격");
+    const s = el("small", "", (r.status === "fail" ? "불합격" : "합격") + (r.spec !== null && r.spec !== undefined ? " ≤" + r.spec.toFixed(2) : ""));
     if(badCheck(r)) s.append(el("span", "chk", " ⚠"));
     lab.append(s);
-    lab.setAttribute("aria-label", short(r.angle) + " " + (r.status === "fail" ? "불합격" : "합격") + ", 눌러서 바꾸기");
-    lab.addEventListener("click", () => { r.status = r.status === "fail" ? "pass" : "fail"; saveDraft(); renderEntry(); });
+    const bySpec = r.spec !== null && r.spec !== undefined;
+    lab.setAttribute("aria-label", short(r.angle) + " " + (r.status === "fail" ? "불합격" : "합격") + (bySpec ? ", 부품 기준 " + r.spec.toFixed(2) + " 자동 판정" : ", 눌러서 바꾸기"));
+    lab.addEventListener("click", () => {
+      if(bySpec){ toast(short(r.angle) + "는 부품 기준 ΔE " + r.spec.toFixed(2) + "로 자동 판정합니다"); return; }
+      r.status = r.status === "fail" ? "pass" : "fail"; saveDraft(); renderEntry();
+    });
     g.append(lab);
     COLS.forEach((k, ci) => {
       const i = ri * 4 + ci, v = r[k], typing = i === cur && buf;
@@ -1082,6 +1159,7 @@ function doSave(opts){
   const say = msg => { if(auto) return { rec: records[0], msg }; toast(msg); return { rec: records[0], msg }; };
   const e = checkMeta(); if(e){ toast(e); return null; }
   const m = meta();
+  applySpec(current.rows, m.color);
   const rows = current.rows.filter(r => COLS.some(k => r[k] !== null)).map(({ angle, dE, dL, da, db, status }) => ({ angle, dE, dL, da, db, status }));
   const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), time: Date.now(), ...m, rows, sync: SHEET_URL ? "pending" : "off" };
   records.unshift(rec);
@@ -1102,6 +1180,63 @@ function doSave(opts){
   renderColorHints(); renderPoints(); renderHist();
   return say("Point " + m.point + (auto ? " 자동 저장 · " : " 저장 · ") + keyResult(rec) + (allDone ? " · 모든 포인트 완료" : " · 다음 Point " + np));
 }
+
+/* ---------- 앱 카메라: 원본 해상도로 찍기 ----------
+   휴대폰 기본 카메라(파일 선택)로 찍으면 브라우저가 사진을 작게 줄여 넘기는 경우가 많아 인식률이 떨어짐.
+   앱 안에서 카메라를 열고, 되면 ImageCapture.takePhoto()로 센서 원본 해상도 사진을 받음 */
+
+let camStream = null;
+async function openCamera(){
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ $("photo").click(); return; }
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 4096 }, height: { ideal: 3072 } } });
+  }catch(e){
+    camStream = null;
+    showErr("앱에서 카메라를 열지 못했습니다. 카메라 권한을 허용하거나, 아래 '휴대폰 기본 카메라로 찍기'를 써 주세요.");
+    return;
+  }
+  const v = $("camVideo"); v.srcObject = camStream;
+  $("cam").hidden = false; document.body.classList.add("lock");
+  try{ await v.play(); }catch(e){}
+  const track = camStream.getVideoTracks()[0];
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.focusMode && caps.focusMode.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+  }catch(e){}
+  const st = track.getSettings ? track.getSettings() : {};
+  $("camInfo").textContent = st.width && st.height ? "화면 " + st.width + "×" + st.height : "";
+}
+function closeCamera(){
+  if(camStream) camStream.getTracks().forEach(t => t.stop());
+  camStream = null; $("camVideo").srcObject = null;
+  $("cam").hidden = true; document.body.classList.remove("lock");
+}
+async function shoot(){
+  const track = camStream && camStream.getVideoTracks()[0];
+  if(!track) return;
+  const btn = $("camShot"); btn.disabled = true;
+  let blob = null;
+  try{
+    if("ImageCapture" in window){
+      const ic = new ImageCapture(track);
+      let opts = {};
+      try{ const pc = await ic.getPhotoCapabilities(); if(pc && pc.imageWidth && pc.imageWidth.max) opts = { imageWidth: pc.imageWidth.max }; }catch(e){}
+      blob = await ic.takePhoto(opts).catch(() => ic.takePhoto());
+    }
+  }catch(e){ blob = null; }
+  if(!blob){   // takePhoto가 안 되는 브라우저: 지금 화면(영상)을 그대로 저장
+    const v = $("camVideo"), c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    if(c.width && c.height){ c.getContext("2d").drawImage(v, 0, 0); blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.95)); }
+  }
+  btn.disabled = false; closeCamera();
+  if(!blob){ toast("사진을 찍지 못했습니다. 다시 찍어 주세요"); return; }
+  onPhoto(new File([blob], "camera.jpg", { type: blob.type || "image/jpeg", lastModified: Date.now() }));
+}
+$("camShot").addEventListener("click", shoot);
+$("camClose").addEventListener("click", closeCamera);
+document.addEventListener("visibilitychange", () => { if(document.hidden && camStream) closeCamera(); });
 
 /* ---------- 자동 저장 · 되돌리기 ---------- */
 
@@ -1268,7 +1403,8 @@ async function shareXlsx(){
 /* ---------- 시작 ---------- */
 
 function begin(kind){
-  if(kind === "photo") $("photo").click();
+  if(kind === "photo") openCamera();
+  else if(kind === "phonecam") $("photo").click();
   else if(kind === "album") $("album").click();
   else { showErr(""); newDraft(emptyRows(), null); openEntry(); }
 }
@@ -1279,7 +1415,8 @@ function guard(e, kind){
   if(hasValues()){ e && e.preventDefault(); pendingNext = kind; $("pendingBox").hidden = false; $("draftBox").hidden = true; $("pendResume").focus(); return false; }
   return true;
 }
-$("photo").addEventListener("click", e => guard(e, "photo"));
+$("photo").addEventListener("click", e => guard(e, "phonecam"));
+$("shootBtn").addEventListener("click", () => { if(guard(null, "photo")) begin("photo"); });
 $("album").addEventListener("click", e => guard(e, "album"));
 $("photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f) onPhoto(f); });
 $("album").addEventListener("change", e => onAlbum(e.target.files));
@@ -1303,7 +1440,7 @@ window.addEventListener("beforeunload", e => { if(hasValues()){ e.preventDefault
 
 /* ---------- 판독 준비 상태 · 앱 안 브라우저 안내 ---------- */
 
-const APP_VERSION = "2026-10-16";
+const APP_VERSION = "2026-10-17";
 function setOcrStatus(st){
   const p = $("ocrStat"); p.className = "ocrstat " + st; p.textContent = "";
   if(st === "loading") p.textContent = "사진 판독 준비 중… (처음 한 번만 약 7MB를 받습니다)";
@@ -1358,5 +1495,6 @@ if(SHEET_URL){ resendAll(); window.addEventListener("online", resendAll); }
 </script>
 </body>
 </html>
+
 
 
